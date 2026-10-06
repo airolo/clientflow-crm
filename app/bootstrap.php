@@ -55,6 +55,7 @@ set_exception_handler(function (Throwable $e): void {
 
 // Models hold every database query, so pages stay presentation-only.
 require_once __DIR__ . '/models/ListQuery.php';
+require_once __DIR__ . '/models/SoftDeleteModel.php';
 require_once __DIR__ . '/models/LoginAttemptModel.php';
 require_once __DIR__ . '/models/UserModel.php';
 require_once __DIR__ . '/models/ClientModel.php';

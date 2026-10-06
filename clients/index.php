@@ -133,7 +133,7 @@ require __DIR__ . '/../views/header.php';
                                         'return' => 'clients/index.php',
                                     ]); ?>
                                     <button type="submit" class="btn btn-outline-danger"
-                                            data-confirm="Delete <?= e($client['company_name']) ?>? This also removes its deals, tasks and activity history."
+                                            data-confirm="Delete <?= e($client['company_name']) ?>? Its deals, tasks and activity history move to the recycle bin and can be restored by an administrator."
                                             title="Delete" aria-label="Delete <?= e($client['company_name']) ?>">
                                         <i class="bi bi-trash"></i>
                                     </button>

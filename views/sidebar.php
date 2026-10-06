@@ -17,8 +17,16 @@ $navItems = [
 ];
 
 if (is_admin()) {
+    $binCount = $binCount ?? null;
     $navItems[] = ['divider' => 'Administration'];
     $navItems[] = ['label' => 'Users', 'icon' => 'bi-person-gear-fill', 'file' => 'admin/users.php', 'key' => 'users'];
+    $navItems[] = [
+        'label' => 'Recycle bin',
+        'icon'  => 'bi-trash3-fill',
+        'file'  => 'admin/recycle_bin.php',
+        'key'   => 'recycle',
+        'badge' => $binCount ?: null,
+    ];
 }
 
 $pendingTasks = $pendingTasks ?? null;
@@ -34,6 +42,8 @@ $pendingTasks = $pendingTasks ?? null;
                 <span><?= e($item['label']) ?></span>
                 <?php if ($item['key'] === 'tasks' && $pendingTasks): ?>
                     <span class="badge rounded-pill text-bg-danger ms-auto"><?= (int) $pendingTasks ?></span>
+                <?php elseif (!empty($item['badge'])): ?>
+                    <span class="badge rounded-pill text-bg-secondary ms-auto"><?= (int) $item['badge'] ?></span>
                 <?php endif; ?>
             </a>
         <?php endif; ?>

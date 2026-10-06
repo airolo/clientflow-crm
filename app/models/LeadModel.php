@@ -34,6 +34,7 @@ function lead_list(array $options = []): array
         'sort'        => lead_sort_columns(),
         'sort_default' => 'created',
         'order_by'    => 'l.id DESC',
+        'soft_delete' => ['l'],
     ]);
 }
 
@@ -41,11 +42,11 @@ function lead_find(int $id): ?array
 {
     $stmt = db()->prepare(
         'SELECT l.*, u.name AS owner_name, cu.name AS creator_name,
-                (SELECT COUNT(*) FROM deals d WHERE d.lead_id = l.id) AS deal_count
+                (SELECT COUNT(*) FROM deals d WHERE d.lead_id = l.id AND d.deleted_at IS NULL) AS deal_count
          FROM leads l
          LEFT JOIN users u  ON u.id = l.assigned_to
          LEFT JOIN users cu ON cu.id = l.created_by
-         WHERE l.id = ? LIMIT 1'
+         WHERE l.id = ? AND l.deleted_at IS NULL LIMIT 1'
     );
     $stmt->execute([$id]);
     return $stmt->fetch() ?: null;
@@ -55,7 +56,8 @@ function lead_find(int $id): ?array
 function lead_options(): array
 {
     $rows = db()->query(
-        'SELECT id, lead_name, company FROM leads WHERE status NOT IN ("won","lost") ORDER BY lead_name ASC'
+        'SELECT id, lead_name, company FROM leads
+         WHERE deleted_at IS NULL AND status NOT IN ("won","lost") ORDER BY lead_name ASC'
     )->fetchAll();
     $options = [];
     foreach ($rows as $row) {
@@ -109,39 +111,45 @@ function lead_update(int $id, array $data): void
 
 function lead_delete(int $id): void
 {
-    $stmt = db()->prepare('DELETE FROM leads WHERE id = ?');
-    $stmt->execute([$id]);
+    soft_delete_row('lead', $id);
+}
+
+/** Bring a deleted lead, and its deals and tasks, back. */
+function lead_restore(int $id): void
+{
+    soft_delete_restore('lead', $id);
 }
 
 /** Move a lead to a new status (used by the quick status dropdown). */
 function lead_update_status(int $id, string $status): void
 {
-    $stmt = db()->prepare('UPDATE leads SET status = ? WHERE id = ?');
+    $stmt = db()->prepare('UPDATE leads SET status = ? WHERE id = ? AND deleted_at IS NULL');
     $stmt->execute([$status, $id]);
 }
 
 /** Dashboard figures. */
 function lead_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM leads')->fetchColumn();
+    return (int) db()->query('SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL')->fetchColumn();
 }
 
 function lead_count_active(): int
 {
-    $stmt = db()->prepare('SELECT COUNT(*) FROM leads WHERE status NOT IN ("won","lost")');
+    $stmt = db()->prepare('SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL AND status NOT IN ("won","lost")');
     $stmt->execute();
     return (int) $stmt->fetchColumn();
 }
 
 function lead_count_by_status(): array
 {
-    return db()->query('SELECT status, COUNT(*) AS total FROM leads GROUP BY status')
+    return db()->query('SELECT status, COUNT(*) AS total FROM leads WHERE deleted_at IS NULL GROUP BY status')
         ->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 function lead_count_by_source(): array
 {
-    return db()->query('SELECT lead_source, COUNT(*) AS total FROM leads GROUP BY lead_source ORDER BY total DESC')
+    return db()->query('SELECT lead_source, COUNT(*) AS total FROM leads WHERE deleted_at IS NULL
+                      GROUP BY lead_source ORDER BY total DESC')
         ->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
@@ -152,8 +160,9 @@ function lead_unconverted(int $limit = 6): array
         'SELECT l.id, l.lead_name, l.company, l.status, l.estimated_value, u.name AS owner_name
          FROM leads l
          LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE l.status NOT IN ("won","lost")
-           AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.lead_id = l.id)
+         WHERE l.deleted_at IS NULL
+           AND l.status NOT IN ("won","lost")
+           AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.lead_id = l.id AND d.deleted_at IS NULL)
          ORDER BY l.estimated_value DESC
          LIMIT ?'
     );

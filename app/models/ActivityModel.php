@@ -41,6 +41,13 @@ function activity_list(array $options = []): array
         // sort whitelist is needed.
         'sort'        => ['recent' => 'a.created_at'],
         'sort_default' => 'recent',
+        'soft_delete' => ['a'],
+        // An activity whose client or lead has been deleted disappears with
+        // it, so the history is never left dangling against a missing record.
+        'where_extra' => [
+            '(a.client_id IS NULL OR c.deleted_at IS NULL)',
+            '(a.lead_id   IS NULL OR l.deleted_at IS NULL)',
+        ],
     ]);
 }
 
@@ -52,7 +59,7 @@ function activity_find(int $id): ?array
          LEFT JOIN clients c ON c.id = a.client_id
          LEFT JOIN leads   l ON l.id = a.lead_id
          LEFT JOIN users   u ON u.id = a.created_by
-         WHERE a.id = ? LIMIT 1'
+         WHERE a.id = ? AND a.deleted_at IS NULL LIMIT 1'
     );
     $stmt->execute([$id]);
     return $stmt->fetch() ?: null;
@@ -92,8 +99,12 @@ function activity_update(int $id, array $data): void
 
 function activity_delete(int $id): void
 {
-    $stmt = db()->prepare('DELETE FROM activities WHERE id = ?');
-    $stmt->execute([$id]);
+    soft_delete_row('activity', $id);
+}
+
+function activity_restore(int $id): void
+{
+    soft_delete_restore('activity', $id);
 }
 
 // A history feed reads newest first.
@@ -120,6 +131,9 @@ function activity_recent(int $limit = 8): array
          LEFT JOIN clients c ON c.id = a.client_id
          LEFT JOIN leads   l ON l.id = a.lead_id
          LEFT JOIN users   u ON u.id = a.created_by
+         WHERE a.deleted_at IS NULL
+           AND (a.client_id IS NULL OR c.deleted_at IS NULL)
+           AND (a.lead_id   IS NULL OR l.deleted_at IS NULL)
          ORDER BY a.created_at DESC, a.id DESC
          LIMIT ?'
     );
@@ -131,13 +145,13 @@ function activity_recent(int $limit = 8): array
 /** Count per activity type (dashboard + reports). */
 function activity_count_by_type(): array
 {
-    return db()->query('SELECT type, COUNT(*) AS total FROM activities GROUP BY type')
+    return db()->query('SELECT type, COUNT(*) AS total FROM activities WHERE deleted_at IS NULL GROUP BY type')
         ->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 function activity_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM activities')->fetchColumn();
+    return (int) db()->query('SELECT COUNT(*) FROM activities WHERE deleted_at IS NULL')->fetchColumn();
 }
 
 function activity_validate(array $data): array

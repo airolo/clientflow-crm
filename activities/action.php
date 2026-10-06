@@ -44,7 +44,7 @@ if (!can_manage(['created_by' => $activity['created_by'], 'assigned_to' => 0])) 
 
 if ($action === 'delete') {
     activity_delete($id);
-    flash_success('Activity deleted.', $return);
+    flash_success('Activity moved to the recycle bin.', $return);
 }
 
 flash_error('Unknown action requested.', $return);

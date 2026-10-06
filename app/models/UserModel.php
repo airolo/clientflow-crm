@@ -45,6 +45,9 @@ function user_list(array $options = []): array
         'sort'         => ['role_name' => 'u.role'],
         'sort_default' => 'role_name',
         'order_by'     => 'u.role = "admin" DESC, u.name ASC',
+        // Users are never soft-deleted: a login account is deactivated with
+        // is_active = 0 or removed outright, and the table has no deleted_at.
+        'soft_delete'  => [],
     ]);
 }
 
@@ -186,10 +189,10 @@ function user_workload(): array
 {
     return db()->query(
         'SELECT u.id, u.name, u.role,
-                (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id) AS client_count,
-                (SELECT COUNT(*) FROM leads l   WHERE l.assigned_to = u.id) AS lead_count,
-                (SELECT COUNT(*) FROM deals d   WHERE d.assigned_to = u.id AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_deals,
-                (SELECT COUNT(*) FROM tasks t   WHERE t.assigned_to = u.id AND t.status <> "completed") AS open_tasks
+                (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id AND c.deleted_at IS NULL) AS client_count,
+                (SELECT COUNT(*) FROM leads l   WHERE l.assigned_to = u.id AND l.deleted_at IS NULL) AS lead_count,
+                (SELECT COUNT(*) FROM deals d   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_deals,
+                (SELECT COUNT(*) FROM tasks t   WHERE t.assigned_to = u.id AND t.deleted_at IS NULL AND t.status <> "completed") AS open_tasks
          FROM users u
          WHERE u.is_active = 1
          ORDER BY open_deals DESC, u.name ASC'

@@ -55,8 +55,7 @@ require __DIR__ . '/../views/header.php';
         'in_progress' => 'In progress',
         'completed'   => 'Completed',
 ];
-    $statusCounts = db()->query('SELECT status, COUNT(*) AS total FROM tasks GROUP BY status')
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    $statusCounts = task_count_by_status();
     $allTaskCount = array_sum(array_map('intval', $statusCounts));
     ?>
     <?php foreach ($tabs as $value => $label):

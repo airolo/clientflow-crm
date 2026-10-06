@@ -339,6 +339,9 @@ $adminPages = @(
     'activities.php?client_id=1','activities.php?lead_id=1',
     'activities/form.php','activity_form.php?id=1','activity_form.php?id=30','activity_form.php?id=999',
     'reports/index.php','admin/users.php','users.php?role=staff','users.php?search=sarah',
+    'admin/recycle_bin.php','admin/recycle_bin.php?type=client','admin/recycle_bin.php?type=lead',
+    'admin/recycle_bin.php?type=deal','admin/recycle_bin.php?type=task','admin/recycle_bin.php?type=activity',
+    'admin/recycle_bin.php?type=client&search=zzz',
     'admin/user_form.php','user_form.php?id=2','user_form.php?id=999','auth/profile.php'
 )
 foreach ($page in $adminPages) {
@@ -537,6 +540,145 @@ $t = Get-Token 'admin/users.php' $admin
 Invoke-App 'POST' 'admin/user_action.php' $admin @{ _token = $t; action = 'delete'; id = 1 } | Out-Null
 Assert 'admin cannot delete own account' ((Invoke-Sql 'SELECT COUNT(*) FROM users WHERE id=1;') -eq '1')
 
+# ------------------------------------------------------------ soft delete
+
+Section 'Soft delete and the recycle bin'
+
+# A client with one of everything hanging off it, so the cascade behaviour
+# that used to destroy the lot can be checked directly.
+$t = Get-Token 'clients/form.php' $admin
+$cId = [int]([regex]::Match((Invoke-App 'POST' 'clients/form.php' $admin @{
+    _token = $t; company_name = 'Regression SoftDelete'; contact_person = 'Soft Person'; status = 'active'
+}).Location, 'id=(\d+)').Groups[1].Value)
+
+$t = Get-Token "client_form.php?id=$cId" $admin
+Invoke-App 'POST' 'clients/form.php' $admin @{
+    _token = $t; id = $cId; company_name = 'Regression SoftDelete'
+    contact_person = 'Soft Person'; status = 'active'
+} | Out-Null
+
+$t = Get-Token 'pipeline/form.php' $admin
+Invoke-App 'POST' 'pipeline/form.php' $admin @{
+    _token = $t; deal_title = 'Regression SD Deal'; client_id = $cId
+    value = '5000'; stage = 'new_lead'
+} | Out-Null
+$t = Get-Token 'task_form.php' $admin
+Invoke-App 'POST' 'tasks/form.php' $admin @{
+    _token = $t; title = 'Regression SD Task'; client_id = $cId; status = 'pending'; priority = 'medium'
+} | Out-Null
+$t = Get-Token 'activity_form.php' $admin
+Invoke-App 'POST' 'activities/form.php' $admin @{
+    _token = $t; client_id = $cId; type = 'note'; title = 'Regression SD Activity'
+} | Out-Null
+
+$childCount = Invoke-Sql "SELECT CONCAT(
+    (SELECT COUNT(*) FROM deals WHERE client_id=$cId), '/',
+    (SELECT COUNT(*) FROM tasks WHERE client_id=$cId), '/',
+    (SELECT COUNT(*) FROM activities WHERE client_id=$cId));"
+Assert 'fixture has one deal, task and activity' ($childCount -eq '1/1/1') "got $childCount"
+
+# --- delete ---
+$t = Get-Token 'clients/index.php' $admin
+Invoke-App 'POST' 'clients/action.php' $admin @{
+    _token = $t; action = 'delete'; id = $cId; return = 'clients/index.php'
+} | Out-Null
+
+Assert 'client row survives the delete' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cId;") -eq '1')
+Assert 'client is stamped, not removed' ((Invoke-Sql "SELECT deleted_at IS NOT NULL FROM clients WHERE id=$cId;") -eq '1')
+Assert 'deleter is recorded' ((Invoke-Sql "SELECT deleted_by FROM clients WHERE id=$cId;") -eq '1')
+
+# The whole point: the children are untouched.
+$afterDelete = Invoke-Sql "SELECT CONCAT(
+    (SELECT COUNT(*) FROM deals WHERE client_id=$cId), '/',
+    (SELECT COUNT(*) FROM tasks WHERE client_id=$cId), '/',
+    (SELECT COUNT(*) FROM activities WHERE client_id=$cId));"
+Assert 'deals, tasks and activities are NOT destroyed' ($afterDelete -eq '1/1/1') "got $afterDelete"
+
+# --- hidden everywhere ---
+# Every listing is asserted through ?search=, never the bare page. The list
+# screens default to oldest-first, so a record created seconds ago lands on the
+# LAST page - asserting on page 1 would pass vacuously.
+Invoke-App 'GET' 'clients/index.php' $admin | Out-Null   # drain the success flash
+
+Assert 'deleted client is gone from the list' (-not ((Invoke-App 'GET' 'clients.php?search=SoftDelete' $admin).Body -match 'Regression SoftDelete'))
+Assert 'deleted client 404s by direct URL' ((Invoke-App 'GET' "client_view.php?id=$cId" $admin).Location -notmatch 'client_view')
+Assert 'its deal is hidden from the pipeline' (-not ((Invoke-App 'GET' 'pipeline.php?search=SD+Deal' $admin).Body -match 'Regression SD Deal'))
+Assert 'its task is hidden from the task board' (-not ((Invoke-App 'GET' 'tasks.php?search=SD+Task' $admin).Body -match 'Regression SD Task'))
+Assert 'its activity is hidden from the feed' (-not ((Invoke-App 'GET' 'activities.php?search=SD+Activity' $admin).Body -match 'Regression SD Activity'))
+Assert 'reports ignore it' (-not ((Invoke-App 'GET' 'reports/index.php' $admin).Body -match 'Regression SD'))
+
+# --- recycle bin ---
+$bin = (Invoke-App 'GET' 'admin/recycle_bin.php?type=client&search=SoftDelete' $admin).Body
+Assert 'recycle bin lists the deleted client' ($bin -match 'Regression SoftDelete')
+Assert 'recycle bin shows who deleted it' ($bin -match 'Alex Morgan')
+Assert 'recycle bin counts the linked records' ($bin -match '3 attached records')
+
+Assert 'staff cannot open the recycle bin' ((Invoke-App 'GET' 'admin/recycle_bin.php' $staff).Location -match 'index\.php$')
+$t = Get-Token 'admin/users.php' $staff
+Invoke-App 'POST' 'admin/recycle_action.php' $staff @{
+    _token = $t; action = 'restore'; type = 'client'; id = $cId
+} | Out-Null
+Assert 'staff cannot restore via a direct POST' ((Invoke-Sql "SELECT deleted_at IS NOT NULL FROM clients WHERE id=$cId;") -eq '1')
+
+# --- restore ---
+$t = Get-Token 'admin/recycle_bin.php' $admin
+Invoke-App 'POST' 'admin/recycle_action.php' $admin @{
+    _token = $t; action = 'restore'; type = 'client'; id = $cId
+} | Out-Null
+Assert 'restore clears the stamp' ((Invoke-Sql "SELECT deleted_at IS NULL FROM clients WHERE id=$cId;") -eq '1')
+
+# Drain the restore flash before looking for the records in listings.
+Invoke-App 'GET' 'admin/recycle_bin.php' $admin | Out-Null
+
+Assert 'restored client is back in the list' ((Invoke-App 'GET' 'clients.php?search=SoftDelete' $admin).Body -match 'Regression SoftDelete')
+Assert 'restored client opens again' ((Invoke-App 'GET' "client_view.php?id=$cId" $admin).Code -eq 200)
+Assert 'its deal came back too' ((Invoke-App 'GET' 'pipeline.php?search=SD+Deal' $admin).Body -match 'Regression SD Deal')
+Assert 'its task came back too' ((Invoke-App 'GET' 'tasks.php?search=SD+Task' $admin).Body -match 'Regression SD Task')
+Assert 'its activity came back too' ((Invoke-App 'GET' 'activities.php?search=SD+Activity' $admin).Body -match 'Regression SD Activity')
+Assert 'the bin no longer lists it' (-not ((Invoke-App 'GET' 'admin/recycle_bin.php?type=client&search=SoftDelete' $admin).Body -match 'Regression SoftDelete'))
+
+# --- delete forever requires typing the name ---
+$t = Get-Token 'clients/index.php' $admin
+Invoke-App 'POST' 'clients/action.php' $admin @{
+    _token = $t; action = 'delete'; id = $cId; return = 'clients/index.php'
+} | Out-Null
+
+$t = Get-Token 'admin/recycle_bin.php' $admin
+Invoke-App 'POST' 'admin/recycle_action.php' $admin @{
+    _token = $t; action = 'purge'; type = 'client'; id = $cId; confirm = 'wrong name'
+} | Out-Null
+Assert 'purge refused when the name does not match' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cId;") -eq '1')
+
+$t = Get-Token 'admin/recycle_bin.php' $admin
+Invoke-App 'POST' 'admin/recycle_action.php' $admin @{
+    _token = $t; action = 'purge'; type = 'client'; id = $cId; confirm = 'Regression SoftDelete'
+} | Out-Null
+Assert 'purge removes the row when confirmed' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cId;") -eq '0')
+Assert 'purge cascades to the children, as documented' (
+    (Invoke-Sql "SELECT COUNT(*) FROM deals WHERE client_id=$cId;") -eq '0' -and
+    (Invoke-Sql "SELECT COUNT(*) FROM tasks WHERE client_id=$cId;") -eq '0' -and
+    (Invoke-Sql "SELECT COUNT(*) FROM activities WHERE client_id=$cId;") -eq '0')
+
+# --- purge cannot be aimed at a live row ---
+$t = Get-Token 'clients/form.php' $admin
+$liveId = [int]([regex]::Match((Invoke-App 'POST' 'clients/form.php' $admin @{
+    _token = $t; company_name = 'Regression LiveGuard'; contact_person = 'Live'; status = 'prospect'
+}).Location, 'id=(\d+)').Groups[1].Value)
+$t = Get-Token 'admin/recycle_bin.php' $admin
+Invoke-App 'POST' 'admin/recycle_action.php' $admin @{
+    _token = $t; action = 'purge'; type = 'client'; id = $liveId; confirm = 'Regression LiveGuard'
+} | Out-Null
+Assert 'purge ignores a record that is not deleted' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$liveId;") -eq '1')
+
+# --- CSRF on the recycle bin ---
+$t = Get-Token 'admin/recycle_bin.php' $admin
+Invoke-App 'POST' 'admin/recycle_action.php' $admin @{
+    _token = 'deadbeef'; action = 'restore'; type = 'client'; id = $liveId
+} | Out-Null
+Assert 'recycle bin rejects a bad CSRF token' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$liveId;") -eq '1')
+
+Invoke-Sql "DELETE FROM clients WHERE id IN ($cId, $liveId);" | Out-Null
+
 $t = Get-Token 'auth/profile.php' $admin
 Invoke-App 'POST' 'auth/profile.php' $admin @{
     _token = $t; action = 'password'; current_password = 'wrongpass'
@@ -577,7 +719,7 @@ foreach ($page in @('clients/index.php','leads/index.php','tasks/index.php','act
 Section 'Flash messages render once'
 foreach ($case in @(
     @{ n = 'create client'; p = 'clients/form.php';   f = @{ company_name = 'Flash Co'; contact_person = 'F'; status = 'prospect' }; loc = 'clients/index.php'; expect = 'was created' },
-    @{ n = 'delete client'; p = 'clients/action.php'; f = @{ action = 'delete'; return = 'clients/index.php' }; loc = 'clients/index.php'; expect = 'was deleted' },
+    @{ n = 'delete client'; p = 'clients/action.php'; f = @{ action = 'delete'; return = 'clients/index.php' }; loc = 'clients/index.php'; expect = 'moved to the recycle bin' },
     @{ n = 'create lead';   p = 'leads/form.php';     f = @{ lead_name = 'FlashLead'; lead_source = 'website'; status = 'new'; estimated_value = '10' }; loc = 'leads/index.php'; expect = 'was created' },
     @{ n = 'create task';   p = 'tasks/form.php';     f = @{ title = 'FlashTask'; priority = 'low'; status = 'pending'; due_date = '2026-12-01' }; loc = 'tasks/index.php'; expect = 'was created' },
     @{ n = 'create deal';   p = 'pipeline/form.php';     f = @{ deal_title = 'FlashDeal'; client_id = 1; stage = 'contacted'; value = '42' }; loc = 'pipeline/index.php'; expect = 'added to the pipeline' }

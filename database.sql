@@ -80,13 +80,21 @@ CREATE TABLE `clients` (
   `created_by`      INT UNSIGNED DEFAULT NULL,
   `created_at`      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- Soft delete. NULL means live. Deleting a client used to cascade to its
+  -- deals, tasks and activity history and destroy them irreversibly; now the
+  -- row is stamped and only hidden, so admin/recycle_bin.php can restore it.
+  `deleted_at`      DATETIME DEFAULT NULL,
+  `deleted_by`      INT UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_clients_status`    (`status`),
   KEY `idx_clients_assigned`  (`assigned_to`),
   KEY `idx_clients_company`   (`company_name`),
+  KEY `idx_clients_deleted`   (`deleted_at`),
   CONSTRAINT `fk_clients_assigned` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_clients_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_clients_deleter` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -110,14 +118,19 @@ CREATE TABLE `leads` (
   `created_by`       INT UNSIGNED DEFAULT NULL,
   `created_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at`       DATETIME DEFAULT NULL,
+  `deleted_by`       INT UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_leads_status`   (`status`),
   KEY `idx_leads_source`   (`lead_source`),
   KEY `idx_leads_assigned` (`assigned_to`),
   KEY `idx_leads_created`  (`created_at`),
+  KEY `idx_leads_deleted`  (`deleted_at`),
   CONSTRAINT `fk_leads_assigned` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_leads_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_leads_deleter` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -139,11 +152,14 @@ CREATE TABLE `deals` (
   `created_by`         INT UNSIGNED DEFAULT NULL,
   `created_at`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at`         DATETIME DEFAULT NULL,
+  `deleted_by`         INT UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_deals_stage`   (`stage`),
   KEY `idx_deals_client`  (`client_id`),
   KEY `idx_deals_lead`    (`lead_id`),
   KEY `idx_deals_assigned`(`assigned_to`),
+  KEY `idx_deals_deleted` (`deleted_at`),
   CONSTRAINT `fk_deals_client` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_deals_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`)
@@ -151,6 +167,8 @@ CREATE TABLE `deals` (
   CONSTRAINT `fk_deals_assigned` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_deals_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_deals_deleter` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -172,11 +190,14 @@ CREATE TABLE `tasks` (
   `completed_at`  DATETIME DEFAULT NULL,
   `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at`    DATETIME DEFAULT NULL,
+  `deleted_by`    INT UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_tasks_status`   (`status`),
   KEY `idx_tasks_due`      (`due_date`),
   KEY `idx_tasks_assigned` (`assigned_to`),
   KEY `idx_tasks_client`   (`client_id`),
+  KEY `idx_tasks_deleted`  (`deleted_at`),
   CONSTRAINT `fk_tasks_client` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_tasks_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`)
@@ -184,6 +205,8 @@ CREATE TABLE `tasks` (
   CONSTRAINT `fk_tasks_assigned` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_tasks_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_tasks_deleter` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -200,15 +223,20 @@ CREATE TABLE `activities` (
   `details`     TEXT DEFAULT NULL,
   `created_by`  INT UNSIGNED DEFAULT NULL,
   `created_at`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `deleted_at`  DATETIME DEFAULT NULL,
+  `deleted_by`  INT UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_activities_client`  (`client_id`),
   KEY `idx_activities_lead`    (`lead_id`),
   KEY `idx_activities_created` (`created_at`),
+  KEY `idx_activities_deleted` (`deleted_at`),
   CONSTRAINT `fk_activities_client` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_activities_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_activities_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_activities_deleter` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

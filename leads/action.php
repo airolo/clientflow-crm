@@ -39,7 +39,7 @@ if (!can_manage($lead)) {
 
 if ($action === 'delete') {
     lead_delete($id);
-    flash_success('Lead "' . $lead['lead_name'] . '" was deleted.', 'leads/index.php');
+    flash_success('Lead "' . $lead['lead_name'] . '" moved to the recycle bin.', 'leads/index.php');
 }
 
 if ($action === 'status') {

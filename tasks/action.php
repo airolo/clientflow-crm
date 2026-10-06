@@ -56,7 +56,7 @@ if ($action === 'reopen') {
 
 if ($action === 'delete') {
     task_delete($id);
-    flash_success('Task "' . $task['title'] . '" was deleted.', 'tasks/index.php');
+    flash_success('Task "' . $task['title'] . '" moved to the recycle bin.', 'tasks/index.php');
 }
 
 flash_error('Unknown action requested.', $return);

@@ -136,6 +136,44 @@
     }
 
     /**
+     * Delete-forever dialog in the recycle bin.
+     *
+     * Populated from data-* attributes on the trigger, and the submit button
+     * stays disabled until the typed name matches exactly. The server re-checks
+     * the same thing - this is to stop a misclick, not to enforce anything.
+     */
+    var purgeModal = document.getElementById('purgeModal');
+    if (purgeModal) {
+        var purgeExpected = '';
+        var purgeConfirm = document.getElementById('purgeConfirm');
+        var purgeSubmit = document.getElementById('purgeSubmit');
+
+        purgeModal.addEventListener('show.bs.modal', function (event) {
+            var trigger = event.relatedTarget;
+            if (!trigger) return;
+
+            purgeExpected = trigger.getAttribute('data-label') || '';
+            var children = parseInt(trigger.getAttribute('data-children') || '0', 10);
+
+            document.getElementById('purgeType').value = trigger.getAttribute('data-type');
+            document.getElementById('purgeId').value = trigger.getAttribute('data-id');
+            document.getElementById('purgeLabel').textContent = purgeExpected;
+            document.getElementById('purgeExpected').textContent = purgeExpected;
+            document.getElementById('purgeChildren').textContent = children > 0
+                ? 'This will also permanently delete ' + children + ' linked '
+                    + (children === 1 ? 'record' : 'records') + '.'
+                : '';
+
+            purgeConfirm.value = '';
+            purgeSubmit.disabled = true;
+        });
+
+        purgeConfirm.addEventListener('input', function () {
+            purgeSubmit.disabled = this.value !== purgeExpected;
+        });
+    }
+
+    /**
      * Filter chips on the task board: click a status to filter instantly.
      */
     var taskFilterSelect = document.getElementById('taskQuickFilter');

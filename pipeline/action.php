@@ -45,7 +45,7 @@ if ($action === 'move') {
 
 if ($action === 'delete') {
     deal_delete($id);
-    flash_success('Deal "' . $deal['deal_title'] . '" was deleted.', 'pipeline/index.php');
+    flash_success('Deal "' . $deal['deal_title'] . '" moved to the recycle bin.', 'pipeline/index.php');
 }
 
 flash_error('Unknown action requested.', $return);

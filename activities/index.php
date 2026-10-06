@@ -181,7 +181,7 @@ if ($scopeClient || $scopeLead):
                                         'return' => 'activities/index.php',
                                     ]); ?>
                                     <button type="submit" class="btn btn-outline-danger"
-                                            data-confirm="Delete this activity? This cannot be undone."
+                                            data-confirm="Delete this activity? It moves to the recycle bin, where an administrator can restore it."
                                             title="Delete" aria-label="Delete <?= e($activity['title']) ?>"><i class="bi bi-trash"></i></button>
                                     <?php render_post_form_close(); ?>
                                 </div>

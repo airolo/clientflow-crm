@@ -31,7 +31,8 @@ function report_summary(): array
 function report_leads_created_in_days(int $days): int
 {
     $stmt = db()->prepare(
-        'SELECT COUNT(*) FROM leads WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+        'SELECT COUNT(*) FROM leads
+         WHERE deleted_at IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
     );
     $stmt->bindValue(1, $days, PDO::PARAM_INT);
     $stmt->execute();
@@ -122,7 +123,8 @@ function report_monthly_activity(int $months = 6): array
                 SUM(type = "meeting") AS meetings,
                 SUM(type = "note")    AS notes
          FROM activities
-         WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
+         WHERE deleted_at IS NULL
+           AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
          GROUP BY month
          ORDER BY month ASC'
     );
@@ -164,12 +166,14 @@ function report_monthly_growth(int $months = 6): array
         'SELECT month, SUM(clients) AS clients, SUM(leads) AS leads FROM (
             SELECT DATE_FORMAT(created_at, "%Y-%m") AS month, COUNT(*) AS clients, 0 AS leads
               FROM clients
-             WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
+             WHERE deleted_at IS NULL
+               AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
              GROUP BY month
             UNION ALL
             SELECT DATE_FORMAT(created_at, "%Y-%m") AS month, 0 AS clients, COUNT(*) AS leads
               FROM leads
-             WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
+             WHERE deleted_at IS NULL
+               AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
              GROUP BY month
          ) combined
          GROUP BY month ORDER BY month ASC'
@@ -232,18 +236,20 @@ function report_team_performance(): array
 {
     return db()->query(
         'SELECT u.id, u.name, u.role,
-                (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id) AS leads,
-                (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id) AS clients,
+                (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.deleted_at IS NULL) AS leads,
+                (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id AND c.deleted_at IS NULL) AS clients,
                 (SELECT COUNT(*) FROM deals d
-                   WHERE d.assigned_to = u.id
+                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL
                      AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_deals,
                 (SELECT COALESCE(SUM(d.value),0) FROM deals d
-                   WHERE d.assigned_to = u.id
+                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL
                      AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_value,
-                (SELECT COUNT(*) FROM deals d WHERE d.assigned_to = u.id AND d.stage = "won") AS won_deals,
+                (SELECT COUNT(*) FROM deals d
+                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_deals,
                 (SELECT COALESCE(SUM(d.value),0) FROM deals d
-                   WHERE d.assigned_to = u.id AND d.stage = "won") AS won_value,
-                (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status = "completed") AS tasks_done
+                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_value,
+                (SELECT COUNT(*) FROM tasks t
+                   WHERE t.assigned_to = u.id AND t.deleted_at IS NULL AND t.status = "completed") AS tasks_done
          FROM users u
          WHERE u.is_active = 1
          ORDER BY won_value DESC, open_value DESC'
@@ -277,6 +283,7 @@ function report_clients_by_owner(): array
                 SUM(c.status = "prospect") AS prospects
          FROM clients c
          LEFT JOIN users u ON u.id = c.assigned_to
+         WHERE c.deleted_at IS NULL
          GROUP BY u.name
          ORDER BY total DESC'
     )->fetchAll();

@@ -53,9 +53,9 @@ function render_filter_bar(array $config): void
  * Render one control inside a filter bar.
  *
  * @param array $field
- *   type    'search' | 'select' | 'date'
+ *   type    'search' | 'select' | 'date' | 'hidden'
  *   name    input name
- *   label   visible label
+ *   label   visible label (not needed for 'hidden')
  *   col     bootstrap column classes
  *   value   current value
  *   placeholder / options / options_label
@@ -67,6 +67,13 @@ function render_filter_field(array $field): void
     $value = (string) ($field['value'] ?? '');
     $col   = $field['col'] ?? 'col-12 col-md-3';
     $type  = $field['type'] ?? 'select';
+
+    // Carried through the filter form but not shown, e.g. the recycle bin's
+    // record type, which has to survive a search or a page change.
+    if ($type === 'hidden') {
+        echo '<input type="hidden" name="' . e($name) . '" value="' . e($value) . '">';
+        return;
+    }
     ?>
     <div class="<?= e($col) ?>">
         <label for="<?= e($id) ?>" class="form-label"><?= e($field['label']) ?></label>

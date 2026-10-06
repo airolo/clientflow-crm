@@ -175,6 +175,7 @@ ClientFlow/
 │   ├── login.php
 │   ├── logout.php
 │   ├── profile.php
+│   ├── change_password.php       #   forced when the password is still the seeded one
 │   └── README.md
 │
 ├── clients/                      # customer accounts
@@ -217,6 +218,8 @@ ClientFlow/
 │   ├── users.php
 │   ├── user_form.php
 │   ├── user_action.php
+│   ├── recycle_bin.php           #   deleted records: restore or delete forever
+│   ├── recycle_action.php
 │   └── README.md
 │
 ├── app/                          # never served over HTTP
@@ -229,6 +232,8 @@ ClientFlow/
 │   │   └── database.php          #     PDO singleton
 │   ├── models/                   #     every SQL statement
 │   │   ├── ListQuery.php         #       shared list-query builder
+│   │   ├── SoftDeleteModel.php   #       delete, restore, purge
+│   │   ├── LoginAttemptModel.php #       sign-in throttling + audit trail
 │   │   ├── ClientModel.php
 │   │   ├── LeadModel.php
 │   │   ├── DealModel.php
@@ -251,7 +256,14 @@ ClientFlow/
 │       └── README.txt            # versions, licences, local modification
 │
 ├── tools/
-│   └── regression.ps1            # 219-assertion end-to-end suite
+│   ├── regression.ps1            # 269-assertion end-to-end suite
+│   ├── verify_phase1.ps1         # 24 checks for the sign-in hardening
+│   ├── backup.ps1                # mysqldump to a timestamped file
+│   └── README.md
+│
+├── migrations/                   # ALTER scripts for existing installs
+│   ├── 001_login_hardening.sql
+│   └── 002_soft_delete.sql
 │
 ├── .htaccess                     # access rules and legacy URL redirects
 ├── .gitignore  .gitattributes
@@ -290,7 +302,7 @@ header.
 
 ## Database schema
 
-Six tables, all InnoDB, all `utf8mb4`, with foreign keys, indexes and automatic timestamps.
+Seven tables, all InnoDB, all `utf8mb4`, with foreign keys, indexes and automatic timestamps.
 
 ```
 users ──┬──< clients ──┬──< deals >──┬── leads
@@ -304,12 +316,15 @@ users ──┬──< clients ──┬──< deals >──┬── leads
 
 | Table | Purpose | Key columns |
 |---|---|---|
-| `users` | Login accounts and record ownership | unique `email`, `role` enum, `password_hash`, `is_active` |
-| `clients` | Customer accounts | `company_name`, `contact_person`, `status`, `assigned_to` → users |
-| `leads` | Early-stage prospects | `lead_source`, `status`, `estimated_value`, `assigned_to` |
-| `deals` | Pipeline opportunities | `stage`, `value`, `client_id`, `lead_id`, `expected_close_date` |
-| `tasks` | Follow-ups | `due_date`, `priority`, `status`, optional `client_id` / `lead_id`, `completed_at` |
-| `activities` | Interaction history | `type`, `title`, `details`, optional `client_id` / `lead_id`, `created_by` |
+| `users` | Login accounts and record ownership | unique `email`, `role` enum, `password_hash`, `is_active`, `must_change_password` |
+| `clients` | Customer accounts | `company_name`, `contact_person`, `status`, `assigned_to` → users, `deleted_at`, `deleted_by` |
+| `leads` | Early-stage prospects | `lead_source`, `status`, `estimated_value`, `assigned_to`, `deleted_at`, `deleted_by` |
+| `deals` | Pipeline opportunities | `stage`, `value`, `client_id`, `lead_id`, `expected_close_date`, `deleted_at`, `deleted_by` |
+| `tasks` | Follow-ups | `due_date`, `priority`, `status`, optional `client_id` / `lead_id`, `completed_at`, `deleted_at`, `deleted_by` |
+| `activities` | Interaction history | `type`, `title`, `details`, optional `client_id` / `lead_id`, `created_by`, `deleted_at`, `deleted_by` |
+
+A seventh table, `login_attempts`, records every sign-in attempt so failures can be throttled and
+examined afterwards. It is not part of the CRM data model — see *Sign-in hardening*.
 
 Design notes:
 
@@ -318,12 +333,17 @@ Design notes:
 - `deals` is the pipeline, and can link to a client, a lead, or both. Converting a lead creates a
   deal that keeps pointing back at it, so you can trace where the revenue came from.
 - `tasks` and `activities` each have a nullable `client_id` **and** `lead_id`, because a follow-up
-  can belong to either. Foreign keys use `ON DELETE CASCADE` here (delete the client, lose its
-  activity history) and `ON DELETE SET NULL` for user references (delete a staff member, keep the
+  can belong to either. User references use `ON DELETE SET NULL` (delete a staff member, keep the
   records but mark them unassigned).
+- The `ON DELETE CASCADE` from `clients` to its deals, tasks and activities is still in the schema,
+  but a normal delete no longer triggers it — that only happens on *Delete forever* in the recycle
+  bin. See *Nothing is destroyed by deleting it*.
+- `users` is deliberately the one table with no `deleted_at`: an account is deactivated with
+  `is_active = 0` or removed outright, and neither should be reversible.
 - Lookups that run on every list view are indexed: `clients.status`, `clients.assigned_to`,
-  `leads.status`, `leads.lead_source`, `deals.stage`, `deals.client_id`, `tasks.status`,
-  `tasks.due_date`, `activities.client_id`, `activities.created_at`.
+  `clients.deleted_at`, `leads.status`, `leads.lead_source`, `deals.stage`, `deals.client_id`,
+  `tasks.status`, `tasks.due_date`, `activities.client_id`, `activities.created_at`, and
+  `deleted_at` on all five record tables.
 
 ---
 
@@ -458,6 +478,31 @@ in the repository history. Three controls keep that from becoming an account tak
 
 An existing installation needs `migrations/001_login_hardening.sql`; a fresh install already has
 everything from `database.sql`.
+
+### Nothing is destroyed by deleting it
+
+Deleting a client used to issue a hard `DELETE`, and `deals`, `tasks` and
+`activities` were all `ON DELETE CASCADE` from `clients` — so one click destroyed
+its deals, its tasks and its entire interaction history, irrecoverably, with
+nothing recorded.
+
+Now a delete stamps `deleted_at` and `deleted_by`, and the record is hidden
+everywhere: lists, search, detail pages, dashboard aggregates and every report.
+`admin/recycle_bin.php` lists what has been deleted and who did it.
+
+- **Restoring is one `UPDATE`.** Children are never stamped, only hidden by a
+  join, so restoring a client brings its deals, tasks and history back with it.
+  There is no second step that could partially succeed.
+- **Delete forever** is the only hard `DELETE` left. The dialog states how many
+  linked records go with it, and the server requires the record's exact name —
+  checked in PHP, not just in the browser. It can only ever target a row that is
+  already deleted.
+- Login accounts are not part of this: `users` keeps `is_active` for
+  deactivation and has no `deleted_at`.
+
+One consequence worth knowing: **there is still no audit log.** Soft delete
+preserves the data and records *that* something was removed and by whom, but not
+what it looked like beforehand, or who edited it. Restoring is not a full undo.
 
 ### Response headers
 

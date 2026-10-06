@@ -10,6 +10,10 @@ $currentUser = current_user();
 // The sidebar task badge used to be fetched by all 17 pages individually.
 // One query here serves every page instead.
 $pendingTasks = $sidebarPendingTasks ?? task_count_open_for_sidebar((int) $currentUser['id']);
+
+// Same idea for the recycle-bin badge. Staff never see it, so no query runs
+// for them, and it is one UNION ALL rather than a COUNT per table.
+$binCount = $sidebarBinCount ?? (is_admin() ? soft_delete_count() : 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">

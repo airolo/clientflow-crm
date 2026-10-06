@@ -110,9 +110,7 @@ require __DIR__ . '/../views/header.php';
                     <dt>Member since</dt>
                     <dd class="mb-2"><?= e(nice_date($account['created_at'])) ?></dd>
                     <dt>Clients assigned</dt>
-                    <dd class="mb-0">
-                        <?= (int) (db()->query('SELECT COUNT(*) FROM clients WHERE assigned_to = ' . (int) $userId)->fetchColumn()) ?>
-                    </dd>
+                    <dd class="mb-0"><?= client_count_assigned_to($userId) ?></dd>
                 </dl>
             </div>
         </div>

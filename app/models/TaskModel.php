@@ -45,6 +45,12 @@ function task_list(array $options = []): array
         'sort'        => task_sort_columns(),
         'sort_default' => 'due',
         'order_by'    => 't.id DESC',
+        'soft_delete' => ['t'],
+        // A task disappears with the client or lead it was logged against.
+        'where_extra' => [
+            '(t.client_id IS NULL OR c.deleted_at IS NULL)',
+            '(t.lead_id   IS NULL OR l.deleted_at IS NULL)',
+        ],
     ]);
 }
 
@@ -57,7 +63,7 @@ function task_find(int $id): ?array
          LEFT JOIN leads   l  ON l.id = t.lead_id
          LEFT JOIN users   u  ON u.id = t.assigned_to
          LEFT JOIN users   cu ON cu.id = t.created_by
-         WHERE t.id = ? LIMIT 1'
+         WHERE t.id = ? AND t.deleted_at IS NULL LIMIT 1'
     );
     $stmt->execute([$id]);
     return $stmt->fetch() ?: null;
@@ -108,14 +114,18 @@ function task_update(int $id, array $data): void
 function task_set_status(int $id, string $status): void
 {
     $completedAt = $status === 'completed' ? date('Y-m-d H:i:s') : null;
-    $stmt = db()->prepare('UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?');
+    $stmt = db()->prepare('UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND deleted_at IS NULL');
     $stmt->execute([$status, $completedAt, $id]);
 }
 
 function task_delete(int $id): void
 {
-    $stmt = db()->prepare('DELETE FROM tasks WHERE id = ?');
-    $stmt->execute([$id]);
+    soft_delete_row('task', $id);
+}
+
+function task_restore(int $id): void
+{
+    soft_delete_restore('task', $id);
 }
 
 // Open tasks first, then by due date with undated ones last.
@@ -138,12 +148,13 @@ function task_count_pending(?int $assignedTo = null): int
 {
     if ($assignedTo) {
         $stmt = db()->prepare(
-            'SELECT COUNT(*) FROM tasks WHERE status <> "completed" AND (assigned_to = ? OR assigned_to IS NULL)'
+            'SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL
+             AND status <> "completed" AND (assigned_to = ? OR assigned_to IS NULL)'
         );
         $stmt->execute([$assignedTo]);
         return (int) $stmt->fetchColumn();
     }
-    return (int) db()->query('SELECT COUNT(*) FROM tasks WHERE status <> "completed"')->fetchColumn();
+    return (int) db()->query('SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL AND status <> "completed"')->fetchColumn();
 }
 
 /** Sidebar badge count. */
@@ -152,7 +163,8 @@ function task_count_open_for_sidebar(?int $userId): int
     if (!$userId) {
         return 0;
     }
-    $stmt = db()->prepare('SELECT COUNT(*) FROM tasks WHERE status <> "completed" AND assigned_to = ?');
+    $stmt = db()->prepare('SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL
+                        AND status <> "completed" AND assigned_to = ?');
     $stmt->execute([$userId]);
     return (int) $stmt->fetchColumn();
 }
@@ -166,7 +178,10 @@ function task_due_soon(int $limit = 6): array
          LEFT JOIN clients c ON c.id = t.client_id
          LEFT JOIN leads   l ON l.id = t.lead_id
          LEFT JOIN users   u ON u.id = t.assigned_to
-         WHERE t.status <> "completed" AND t.due_date IS NOT NULL AND t.due_date <= CURDATE()
+         WHERE t.deleted_at IS NULL
+           AND (t.client_id IS NULL OR c.deleted_at IS NULL)
+           AND (t.lead_id   IS NULL OR l.deleted_at IS NULL)
+           AND t.status <> "completed" AND t.due_date IS NOT NULL AND t.due_date <= CURDATE()
          ORDER BY t.due_date ASC, FIELD(t.priority, "high","medium","low")
          LIMIT ?'
     );
@@ -179,10 +194,22 @@ function task_overdue_count(): int
 {
     return (int) db()->query(
         'SELECT COUNT(*) FROM tasks
-         WHERE status <> "completed" AND due_date IS NOT NULL AND due_date < CURDATE()'
+         WHERE deleted_at IS NULL
+           AND status <> "completed" AND due_date IS NOT NULL AND due_date < CURDATE()'
     )->fetchColumn();
 }
 
+/** Live task count per status, for the tab badges on the task board. */
+function task_count_by_status(): array
+{
+    return db()->query(
+        'SELECT status, COUNT(*) AS total FROM tasks WHERE deleted_at IS NULL GROUP BY status'
+    )->fetchAll(PDO::FETCH_KEY_PAIR);
+}
+
+/**
+ * Validate a task form. Returns an array of field => error message.
+ */
 function task_validate(array $data): array
 {
     $errors = [];

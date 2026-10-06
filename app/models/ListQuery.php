@@ -17,6 +17,11 @@ declare(strict_types=1);
 /**
  * Run a paginated, searchable, filterable SELECT.
  *
+ * Unless `include_deleted` is set, every query is restricted to live rows
+ * (deleted_at IS NULL). Because that restriction has to apply to every list,
+ * count, search and report without each model remembering it, it lives here
+ * rather than being repeated in fifty WHERE clauses.
+ *
  * @param array $config
  *   select      string  columns to return
  *   from        string  FROM clause including every JOIN
@@ -29,6 +34,12 @@ declare(strict_types=1);
  *   sort_default string  whitelisted column used when the request is absent
  *   order_by    string  extra tie-breaker, e.g. 'c.id ASC'
  *   per_page    int     rows per page override
+ *   soft_delete array   table aliases the deleted_at predicate applies to
+ *   only_deleted bool    restrict to deleted rows instead of live ones (the
+ *                       recycle bin); without it, live rows are returned
+ *   where_extra array   raw SQL fragments that always apply and take no
+ *                       parameters, for conditions the caller owns (e.g.
+ *                       "hide rows whose parent is deleted")
  *
  * @return array ['rows' => [], 'total' => int, 'offset' => int]
  */
@@ -44,6 +55,24 @@ function list_query(array $config): array
 
     $where  = [];
     $params = [];
+
+    // Soft delete. Applied here rather than in fifty WHERE clauses, because
+    // list_query is the single choke point every listing goes through and a
+    // forgotten filter would silently show deleted records.
+    // An alias listed in soft_delete with no deleted_at column (users) simply
+    // opts out by passing an empty array.
+    $deletedTest = !empty($config['only_deleted']) ? 'IS NOT NULL' : 'IS NULL';
+    foreach ($config['soft_delete'] ?? ['t'] as $alias) {
+        $where[] = "$alias.deleted_at $deletedTest";
+    }
+
+    // Only meaningful when listing live rows; the bin has no parent visibility
+    // rules of its own.
+    if (empty($config['only_deleted'])) {
+        foreach ($config['where_extra'] ?? [] as $fragment) {
+            $where[] = $fragment;
+        }
+    }
 
     // Multi-field search. The wildcards come from user input but are bound as
     // parameters, so they cannot alter the SQL.
@@ -140,6 +169,10 @@ function id_filter(string $optionKey, string $sqlColumn, array $options): ?array
  * (tasks belong to an assignee, activities to whoever logged them) and in
  * how they sort, so those are passed in rather than hard-coded.
  *
+ * $table and the column names are interpolated, so this must only ever be
+ * called with literals. All four call sites pass fixed strings; the recycle
+ * bin additionally passes $ownerId = 0 to mean "no limit".
+ *
  * @param string $table      'tasks' or 'activities'
  * @param string $userColumn 'assigned_to' or 'created_by'
  * @param string $fkColumn   'client_id' or 'lead_id'
@@ -153,16 +186,27 @@ function related_list(
     int $ownerId,
     int $limit
 ): array {
-    $stmt = db()->prepare(
-        "SELECT r.*, u.name AS owner_name
-         FROM $table r
-         LEFT JOIN users u ON u.id = r.$userColumn
-         WHERE r.$fkColumn = ?
-         ORDER BY $orderBy
-         LIMIT ?"
-    );
-    $stmt->bindValue(1, $ownerId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+    $sql = "SELECT r.*, u.name AS owner_name
+            FROM $table r
+            LEFT JOIN users u ON u.id = r.$userColumn
+            WHERE r.deleted_at IS NULL";
+
+    if ($ownerId > 0) {
+        $sql .= " AND r.$fkColumn = ?";
+    }
+    $sql .= " ORDER BY $orderBy";
+    if ($limit > 0) {
+        $sql .= " LIMIT ?";
+    }
+
+    $stmt = db()->prepare($sql);
+    $pos = 1;
+    if ($ownerId > 0) {
+        $stmt->bindValue($pos++, $ownerId, PDO::PARAM_INT);
+    }
+    if ($limit > 0) {
+        $stmt->bindValue($pos, $limit, PDO::PARAM_INT);
+    }
     $stmt->execute();
     return $stmt->fetchAll();
 }

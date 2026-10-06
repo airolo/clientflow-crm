@@ -36,7 +36,7 @@ if (!can_manage($client)) {
 
 if ($action === 'delete') {
     client_delete($id);
-    flash_success('Client "' . $client['company_name'] . '" was deleted.', $return);
+    flash_success('Client "' . $client['company_name'] . '" moved to the recycle bin.', $return);
 }
 
 flash_error('Unknown action requested.', $return);

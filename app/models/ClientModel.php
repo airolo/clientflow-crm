@@ -40,6 +40,7 @@ function client_list(array $options = []): array
         'sort'        => client_sort_columns(),
         'sort_default' => 'created',
         'order_by'    => 'c.id ASC',
+        'soft_delete' => ['c'],
     ]);
 }
 
@@ -51,7 +52,7 @@ function client_find(int $id): ?array
          FROM clients c
          LEFT JOIN users u  ON u.id = c.assigned_to
          LEFT JOIN users cu ON cu.id = c.created_by
-         WHERE c.id = ? LIMIT 1'
+         WHERE c.id = ? AND c.deleted_at IS NULL LIMIT 1'
     );
     $stmt->execute([$id]);
     return $stmt->fetch() ?: null;
@@ -60,7 +61,9 @@ function client_find(int $id): ?array
 /** All clients as id => label, for task dropdowns. */
 function client_options(): array
 {
-    $rows = db()->query('SELECT id, company_name FROM clients ORDER BY company_name ASC')->fetchAll();
+    $rows = db()->query(
+        'SELECT id, company_name FROM clients WHERE deleted_at IS NULL ORDER BY company_name ASC'
+    )->fetchAll();
     $options = [];
     foreach ($rows as $row) {
         $options[$row['id']] = $row['company_name'];
@@ -111,22 +114,33 @@ function client_update(int $id, array $data): void
     ]);
 }
 
+/**
+ * Delete a client by stamping it. The deals, tasks and activities that hang
+ * off it are left untouched and become invisible with it, so restoring is a
+ * single UPDATE and cannot lose or duplicate a child row.
+ */
 function client_delete(int $id): void
 {
-    $stmt = db()->prepare('DELETE FROM clients WHERE id = ?');
-    $stmt->execute([$id]);
+    soft_delete_row('client', $id);
+}
+
+/** Bring a deleted client, and everything attached to it, back. */
+function client_restore(int $id): void
+{
+    soft_delete_restore('client', $id);
 }
 
 /** Dashboard counts. */
 function client_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM clients')->fetchColumn();
+    return (int) db()->query('SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL')->fetchColumn();
 }
 
 function client_count_by_status(): array
 {
-    return db()->query('SELECT status, COUNT(*) AS total FROM clients GROUP BY status')
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    return db()->query(
+        'SELECT status, COUNT(*) AS total FROM clients WHERE deleted_at IS NULL GROUP BY status'
+    )->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 /** Deal totals for one client. */
@@ -134,7 +148,7 @@ function client_deal_summary(int $clientId): array
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS deal_count, COALESCE(SUM(value), 0) AS total_value
-         FROM deals WHERE client_id = ?'
+         FROM deals WHERE client_id = ? AND deleted_at IS NULL'
     );
     $stmt->execute([$clientId]);
     $row = $stmt->fetch() ?: ['deal_count' => 0, 'total_value' => 0];
@@ -150,11 +164,21 @@ function client_deals(int $clientId): array
         'SELECT d.*, u.name AS owner_name
          FROM deals d
          LEFT JOIN users u ON u.id = d.assigned_to
-         WHERE d.client_id = ?
+         WHERE d.client_id = ? AND d.deleted_at IS NULL
          ORDER BY FIELD(d.stage, "new_lead","contacted","proposal","negotiation","won","lost"), d.value DESC'
     );
     $stmt->execute([$clientId]);
     return $stmt->fetchAll();
+}
+
+/** How many live clients are assigned to one user (profile page). */
+function client_count_assigned_to(int $userId): int
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM clients WHERE assigned_to = ? AND deleted_at IS NULL'
+    );
+    $stmt->execute([$userId]);
+    return (int) $stmt->fetchColumn();
 }
 
 /**
