@@ -6,7 +6,10 @@
 $currentUser = current_user();
 // Flash messages are consumed by alerts.php further down - do not read them here,
 // or the queue is emptied before it can render.
-$pendingTasks = $sidebarPendingTasks ?? null;
+
+// The sidebar task badge used to be fetched by all 17 pages individually.
+// One query here serves every page instead.
+$pendingTasks = $sidebarPendingTasks ?? task_count_open_for_sidebar((int) $currentUser['id']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -62,7 +65,7 @@ $pendingTasks = $sidebarPendingTasks ?? null;
                 <?php endif; ?>
             </div>
             <?php if (!empty($pageActions)): ?>
-                <div class="page-actions"><?= $pageActions ?></div>
+                <?php render_page_actions($pageActions); ?>
             <?php endif; ?>
         </div>
 

@@ -440,7 +440,19 @@ function order_by(array $allowed, string $default): string
 }
 
 /**
- * Render a sortable column header link.
+ * The direction a sortable column should switch to when clicked, and the URL
+ * that does it. Keeps the toggle logic in one place.
+ */
+function sort_href(string $column): string
+{
+    $active = ($_GET['sort'] ?? '') === $column;
+    $nextDir = ($active && strtolower((string) ($_GET['dir'] ?? 'asc')) === 'asc') ? 'desc' : 'asc';
+    return url_with(['sort' => $column, 'dir' => $nextDir, 'page' => 1]);
+}
+
+/**
+ * Render a sortable column header link. Still used where a full header cell
+ * is written inline; render_th() in list_page.php is preferred.
  */
 function sort_link(string $label, string $column, array $allowed, string $default): string
 {
