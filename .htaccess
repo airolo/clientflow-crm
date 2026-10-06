@@ -1,0 +1,70 @@
+# =============================================================
+# ClientFlow CRM - Apache configuration
+# -------------------------------------------------------------
+# Blocks files that must never be served over HTTP but are needed
+# inside the project folder (the SQL setup script, the README, the
+# vendored asset notes) and turns off directory browsing.
+#
+# Requires Apache 2.4 with AllowOverride All, which is the XAMPP
+# default. mod_rewrite is not needed.
+# =============================================================
+
+# No browsable directory listings anywhere in the project.
+Options -Indexes
+
+# Serve the correct MIME type for icon fonts (already the case on
+# XAMPP, but explicit so the vendored icons work on other stacks).
+<IfModule mod_mime.c>
+    AddType font/woff2                .woff2
+    AddType font/woff                 .woff
+    AddType application/javascript    .js
+    AddType text/css                  .css
+</IfModule>
+
+# Files that live in the web root for convenience but must not be
+# downloadable: the SQL dump contains password hashes, the README
+# contains demo credentials.
+#
+# FilesMatch tests the file NAME, not the path, so these are extensions
+# rather than leading-dot patterns.
+<FilesMatch "(?i)\.(sql|md|log|ini|env|bak|old|orig|dist|txt)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Same for editor and VCS droppings.
+<FilesMatch "(?i)(\.htaccess|\.htpasswd|\.gitignore|\.gitattributes)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Application internals are never fetched directly: PHP includes them from
+# the filesystem, so there is no legitimate HTTP request for them. The
+# per-directory .htaccess files repeat this so it still holds on a server
+# without mod_rewrite.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?:config|models|includes)(?:/|$) - [F,L]
+</IfModule>
+
+# Sensible hardening for the pages that do get served.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# Do not advertise the PHP version.
+<IfModule mod_php.c>
+    php_flag expose_php off
+</IfModule>
