@@ -1,0 +1,168 @@
+<?php
+/**
+ * Shared list-query builder.
+ *
+ * The clients, leads, tasks and activities list screens all had the same
+ * shape: read a handful of options, turn them into WHERE fragments and
+ * bound parameters, count the matches for pagination, then fetch one page.
+ * Four copies of that scaffolding meant four places to fix a bug, and they
+ * had already drifted apart.
+ *
+ * Each model now declares its own differences - columns to search, filters
+ * to apply, joins, sortable columns - and this file does the rest.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Run a paginated, searchable, filterable SELECT.
+ *
+ * @param array $config
+ *   select      string  columns to return
+ *   from        string  FROM clause including every JOIN
+ *   count_from  string  FROM clause for the COUNT (defaults to $from)
+ *   search      array   column expressions to LIKE-match
+ *   options     array   raw $_GET-derived options
+ *   filters     array   list of [value, SQL fragment, params]
+ *   sort        array   whitelist of sortable column => SQL expression
+ *   sort_key    string  key read from the request (default 'sort')
+ *   sort_default string  whitelisted column used when the request is absent
+ *   order_by    string  extra tie-breaker, e.g. 'c.id ASC'
+ *   per_page    int     rows per page override
+ *
+ * @return array ['rows' => [], 'total' => int, 'offset' => int]
+ */
+function list_query(array $config): array
+{
+    $options = $config['options'] ?? [];
+    $search  = trim((string) ($options['search'] ?? ''));
+
+    $page    = max(1, (int) ($options['page'] ?? 1));
+    $perPage = (int) ($config['per_page'] ?? ($options['per_page'] ?? ROWS_PER_PAGE));
+    $perPage = max(1, min(100, $perPage));
+    $offset  = ($page - 1) * $perPage;
+
+    $where  = [];
+    $params = [];
+
+    // Multi-field search. The wildcards come from user input but are bound as
+    // parameters, so they cannot alter the SQL.
+    $searchColumns = $config['search'] ?? [];
+    if ($search !== '' && $searchColumns) {
+        $clauses = [];
+        foreach ($searchColumns as $column) {
+            $clauses[] = "$column LIKE ?";
+            $params[] = '%' . $search . '%';
+        }
+        $where[] = '(' . implode(' OR ', $clauses) . ')';
+    }
+
+    // Each filter is [value, sql, params]. The caller decides what makes a
+    // value meaningful - an enum check, a positive id, a non-empty string.
+    foreach ($config['filters'] ?? [] as $filter) {
+        [$value, $sql, $filterParams] = $filter;
+        if ($value === null || $value === '' || $value === false || $value === 0) {
+            continue;
+        }
+        $where[] = $sql;
+        foreach ((array) $filterParams as $param) {
+            $params[] = $param;
+        }
+    }
+
+    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+    $from     = $config['from'];
+    $countFrom = $config['count_from'] ?? $from;
+
+    // Total for pagination.
+    $countStmt = db()->prepare('SELECT COUNT(*) ' . $countFrom . $whereSql);
+    $countStmt->execute($params);
+    $total = (int) $countStmt->fetchColumn();
+
+    // ORDER BY comes only from the whitelist.
+    $sortKey = $options[$config['sort_key'] ?? 'sort'] ?? '';
+    $sortDir = strtolower((string) ($options['dir'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
+    $sort    = $config['sort'];
+    $column  = is_string($sortKey) && isset($sort[$sortKey]) ? $sortKey : ($config['sort_default'] ?? array_key_first($sort));
+    $orderSql = $sort[$column] . ' ' . $sortDir;
+    if (!empty($config['order_by'])) {
+        $orderSql .= ', ' . $config['order_by'];
+    }
+
+    // LIMIT and OFFSET are cast to integers above, so interpolation is safe.
+    $sql = 'SELECT ' . $config['select'] . ' ' . $from . $whereSql
+        . " ORDER BY $orderSql LIMIT $perPage OFFSET $offset";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    return [
+        'rows'   => $stmt->fetchAll(),
+        'total'  => $total,
+        'offset' => $offset,
+    ];
+}
+
+/**
+ * Build a filter that only applies when the value is one of the allowed enum
+ * values. Returns null (meaning "skip") otherwise, which list_query ignores.
+ *
+ * @return array|null [value, sql, [value]]
+ */
+function enum_filter(string $optionKey, string $sqlColumn, array $allowed, array $options): ?array
+{
+    $value = (string) ($options[$optionKey] ?? '');
+    if ($value === '' || !is_valid_option($value, $allowed)) {
+        return null;
+    }
+    return [$value, "$sqlColumn = ?", [$value]];
+}
+
+/**
+ * Build a filter that only applies for a positive id.
+ *
+ * @return array|null [value, sql, [value]]
+ */
+function id_filter(string $optionKey, string $sqlColumn, array $options): ?array
+{
+    $value = (int) ($options[$optionKey] ?? 0);
+    if ($value <= 0) {
+        return null;
+    }
+    return [$value, "$sqlColumn = ?", [$value]];
+}
+
+/**
+ * Rows from tasks or activities that belong to one client or lead.
+ *
+ * client_tasks/lead_tasks and client_activities/lead_activities were
+ * near-identical. The two tables differ in which user column they join on
+ * (tasks belong to an assignee, activities to whoever logged them) and in
+ * how they sort, so those are passed in rather than hard-coded.
+ *
+ * @param string $table      'tasks' or 'activities'
+ * @param string $userColumn 'assigned_to' or 'created_by'
+ * @param string $fkColumn   'client_id' or 'lead_id'
+ * @param string $orderBy    ORDER BY expression
+ */
+function related_list(
+    string $table,
+    string $userColumn,
+    string $fkColumn,
+    string $orderBy,
+    int $ownerId,
+    int $limit
+): array {
+    $stmt = db()->prepare(
+        "SELECT r.*, u.name AS owner_name
+         FROM $table r
+         LEFT JOIN users u ON u.id = r.$userColumn
+         WHERE r.$fkColumn = ?
+         ORDER BY $orderBy
+         LIMIT ?"
+    );
+    $stmt->bindValue(1, $ownerId, PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll();
+}

@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/list_page.php';
 require_once __DIR__ . '/auth.php';
 
 /**
@@ -49,6 +50,7 @@ set_exception_handler(function (Throwable $e): void {
 });
 
 // Models hold every database query, so pages stay presentation-only.
+require_once __DIR__ . '/../models/ListQuery.php';
 require_once __DIR__ . '/../models/UserModel.php';
 require_once __DIR__ . '/../models/ClientModel.php';
 require_once __DIR__ . '/../models/LeadModel.php';
