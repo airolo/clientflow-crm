@@ -1,0 +1,27 @@
+# Normalise line endings so the repo behaves the same on Windows, macOS
+# and Linux. Files are stored with LF and checked out with the platform's
+# native ending.
+
+* text=auto eol=crlf
+
+*.php  text eol=crlf
+*.css  text eol=crlf
+*.js   text eol=crlf
+*.md   text eol=crlf
+*.sql  text eol=crlf
+*.txt  text eol=crlf
+*.ps1  text eol=crlf
+*.yml  text eol=crlf
+*.json text eol=crlf
+
+# .htaccess is read by Apache on Windows, which tolerates either ending but
+# historically prefers CRLF.
+.htaccess text eol=crlf
+
+# Never touch line endings in vendored, minified third-party assets.
+assets/vendor/** -text
+assets/vendor/**/*.css -text
+assets/vendor/**/*.js -text
+assets/vendor/**/*.map -text
+assets/vendor/**/*.woff -text
+assets/vendor/**/*.woff2 -text

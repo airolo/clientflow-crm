@@ -1,0 +1,53 @@
+{
+    "php.executablePath": "C:\\xampp\\php\\php.exe",
+    "php.validate.executablePath": "C:\\xampp\\php\\php.exe",
+    "php.debug.executablePath": "C:\\xampp\\php\\php.exe",
+
+    "files.associations": {
+        "*.php": "php"
+    },
+
+    "[php]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.formatOnSave": false
+    },
+
+    "files.eol": "\r\n",
+
+    "files.exclude": {
+        "**/.git": true
+    },
+
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/vendor": true
+    },
+
+    "devsense-intelli-php.files.exclude": [
+        "**/vendor",
+        "**/node_modules"
+    ],
+    "devsense-intelli-php.diagnostics.unusedVariables": false,
+    "devsense-intelli-php.diagnostics.unreachableCode": false,
+    "devsense-intelli-php.diagnostics.unknownClassConstantNames": false,
+    "devsense-intelli-php.diagnostics.unknownFunction": false,
+    "devsense-intelli-php.diagnostics.unknownMember": false,
+    "devsense-intelli-php.diagnostics.unknownClass": false,
+    "devsense-intelli-php.diagnostics.unknownSymbol": false,
+    "devsense-intelli-php.diagnostics.undefinedVariable": false,
+    "devsense-intelli-php.diagnostics.argumentTypeCoercion": false,
+    "devsense-intelli-php.diagnostics.returnTypeCoercion": false,
+    "devsense-intelli-php.diagnostics.strictFunctionTypes": false,
+
+    "phptools.server.enable": false,
+    "profiler.enable": false,
+
+    "xdebug-php.executablePath": "C:\\xampp\\php\\php.exe",
+    "xdebug-php.path": "C:\\xampp\\php\\ext\\php_xdebug.dll",
+
+    "problems.autoReveal": false,
+    "problems.showCurrentInStatus": true,
+
+    "window.zoomLevel": 0
+}

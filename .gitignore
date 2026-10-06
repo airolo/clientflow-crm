@@ -1,0 +1,44 @@
+# =============================================================
+# ClientFlow CRM - files that must never be committed
+# =============================================================
+
+# --- Local environment / secrets ---------------------------------
+# config/config.php IS tracked: it only holds safe XAMPP defaults and
+# reads every credential from getenv(). Keep local secrets in
+# config/config.local.php instead, which is ignored here and can be
+# loaded by pointing the DB_* environment variables at it.
+config/config.local.php
+.env
+.env.*
+!.env.example
+
+# --- Local database copies ---------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.bak
+
+# --- Editor / OS cruft -------------------------------------------
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs and temporary output -----------------------------------
+*.log
+/logs/
+/tmp/
+/temp/
+*.tmp
+*.cache
+
+# --- Test artefacts ----------------------------------------------
+/tools/*.log
+/test-results/
