@@ -33,14 +33,15 @@ $total  = $result['total'];
 $offset = $result['offset'];
 $users  = user_all(true);
 $mix    = report_activity_mix();
-$sidebarPendingTasks = task_count_open_for_sidebar((int) current_user_id());
 
 $pageTitle    = 'Activities';
 $pageHeading  = 'Activities';
 $pageSubtitle = $total . ' interaction' . ($total === 1 ? '' : 's') . ' recorded';
 $activeNav    = 'activities';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Activities' => null];
-$pageActions  = '<a href="activity_form.php" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Log activity</a>';
+$pageActions = [
+    ['label' => 'Log activity', 'href' => 'activity_form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+];
 
 require __DIR__ . '/includes/header.php';
 ?>
@@ -65,51 +66,22 @@ require __DIR__ . '/includes/header.php';
     <?php endforeach; ?>
 </div>
 
-<!-- Filters -->
-<div class="card mb-3">
-    <div class="card-body filter-bar">
-        <form method="get" action="activities.php" class="row g-2 align-items-end">
-            <div class="col-12 col-md-3">
-                <label for="search" class="form-label">Search</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="search" name="search" id="search" class="form-control"
-                           value="<?= e($search) ?>" placeholder="Summary or notes">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label for="type" class="form-label">Type</label>
-                <select name="type" id="type" class="form-select">
-                    <option value="">All types</option>
-                    <?= select_options(activity_types(), $type) ?>
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <label for="user_id" class="form-label">Logged by</label>
-                <select name="user_id" id="user_id" class="form-select">
-                    <option value="">Anyone</option>
-                    <?php foreach ($users as $user): ?>
-                        <option value="<?= (int) $user['id'] ?>" <?= $userId === (int) $user['id'] ? 'selected' : '' ?>>
-                            <?= e($user['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <label for="date_from" class="form-label">From</label>
-                <input type="date" name="date_from" id="date_from" class="form-control" value="<?= e($dateFrom) ?>">
-            </div>
-            <div class="col-6 col-md-2">
-                <label for="date_to" class="form-label">To</label>
-                <input type="date" name="date_to" id="date_to" class="form-control" value="<?= e($dateTo) ?>">
-            </div>
-            <div class="col-12 col-md-1 d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-grow-1" title="Filter"><i class="bi bi-funnel"></i></button>
-                <a href="activities.php" class="btn btn-light border" title="Clear"><i class="bi bi-x-lg"></i></a>
-            </div>
-        </form>
-    </div>
-</div>
+<?php render_filter_bar([
+    'action' => 'activities.php',
+    'fields' => [
+        ['type' => 'search', 'name' => 'search', 'label' => 'Search', 'col' => 'col-12 col-md-3',
+         'value' => $search, 'placeholder' => 'Summary or notes'],
+        ['type' => 'select', 'name' => 'type', 'label' => 'Type', 'col' => 'col-6 col-md-2',
+         'value' => $type, 'options' => activity_types(), 'options_label' => 'All types'],
+        ['type' => 'select', 'name' => 'user_id', 'label' => 'Logged by', 'col' => 'col-6 col-md-2',
+         'value' => $userId, 'options' => user_options(), 'options_label' => 'Anyone'],
+        ['type' => 'date', 'name' => 'date_from', 'label' => 'From', 'col' => 'col-6 col-md-2',
+         'value' => $dateFrom],
+        ['type' => 'date', 'name' => 'date_to', 'label' => 'To', 'col' => 'col-6 col-md-2',
+         'value' => $dateTo],
+    ],
+    'actions_col' => 'col-12 col-md-1',
+]); ?>
 
 <?php
 // When arriving from a client/lead page, show that scope as a dismissible chip.
@@ -132,21 +104,25 @@ if ($scopeClient || $scopeLead):
         <?php if (!$rows): ?>
             <?php
             $filtered = $search !== '' || $type !== '' || $userId > 0 || $dateFrom !== '' || $dateTo !== '';
-            echo $filtered
-                ? empty_state('bi-search', 'No matching activities', 'Try a different search term or clear the filters.', 'activities.php', 'Clear filters')
-                : empty_state('bi-clock-history', 'No activity logged yet', 'Record calls, emails, meetings and notes as you work.', 'activity_form.php', 'Log activity');
+            render_list_empty_state(
+                $filtered,
+                'bi-search', 'No matching activities', 'Try a different search term or clear the filters.', 'activities.php',
+                'bi-clock-history', 'No activity logged yet',
+                'Record calls, emails, meetings and notes as you work.',
+                'activity_form.php', 'Log activity'
+            );
             ?>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th style="width:56px">Type</th>
-                            <th>Summary</th>
-                            <th>Related to</th>
-                            <th>Logged by</th>
-                            <th>When</th>
-                            <th class="row-actions">Actions</th>
+                            <?php render_th('Type', null, 'w-56'); ?>
+                            <?php render_th('Summary'); ?>
+                            <?php render_th('Related to'); ?>
+                            <?php render_th('Logged by'); ?>
+                            <?php render_th('When'); ?>
+                            <?php render_th('Actions', null, 'row-actions'); ?>
                         </tr>
                     </thead>
                     <tbody>
@@ -195,17 +171,19 @@ if ($scopeClient || $scopeLead):
                             <td class="row-actions">
                                 <div class="btn-group btn-group-sm">
                                     <?php if (can_manage(['created_by' => $activity['created_by'], 'assigned_to' => 0])): ?>
-                                        <a href="activity_form.php?id=<?= (int) $activity['id'] ?>" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+                                        <a href="activity_form.php?id=<?= (int) $activity['id'] ?>" class="btn btn-outline-secondary"
+                                           title="Edit" aria-label="Edit <?= e($activity['title']) ?>"><i class="bi bi-pencil"></i></a>
                                     <?php endif; ?>
-                                    <form method="post" action="activity_action.php" class="m-0">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="action" value="delete">
-                                        <input type="hidden" name="id" value="<?= (int) $activity['id'] ?>">
-                                        <input type="hidden" name="return" value="activities.php">
-                                        <button type="submit" class="btn btn-outline-danger"
-                                                data-confirm="Delete this activity? This cannot be undone."
-                                                title="Delete"><i class="bi bi-trash"></i></button>
-                                    </form>
+                                    <?php render_post_form_open([
+                                        'action_url' => 'activity_action.php',
+                                        'action' => 'delete',
+                                        'id' => (int) $activity['id'],
+                                        'return' => 'activities.php',
+                                    ]); ?>
+                                    <button type="submit" class="btn btn-outline-danger"
+                                            data-confirm="Delete this activity? This cannot be undone."
+                                            title="Delete" aria-label="Delete <?= e($activity['title']) ?>"><i class="bi bi-trash"></i></button>
+                                    <?php render_post_form_close(); ?>
                                 </div>
                             </td>
                         </tr>
@@ -217,11 +195,6 @@ if ($scopeClient || $scopeLead):
     </div>
 </div>
 
-<?php if ($rows): ?>
-    <div class="table-footer">
-        <div><?= result_summary($total, $offset, count($rows)) ?></div>
-        <?= render_pagination($total) ?>
-    </div>
-<?php endif; ?>
+<?php render_table_footer($total, $offset, count($rows)); ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

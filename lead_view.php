@@ -19,17 +19,20 @@ $deals      = lead_deals($id);
 $tasks      = lead_tasks($id);
 $activities = lead_activities($id, 15);
 $canEdit    = can_manage($lead);
-$sidebarPendingTasks = task_count_open_for_sidebar((int) current_user_id());
 
 $pageTitle    = $lead['lead_name'];
 $pageHeading  = $lead['lead_name'];
 $pageSubtitle = ($lead['company'] ?: 'No company') . ' · ' . pretty($lead['lead_source']) . ' · ' . money($lead['estimated_value']);
 $activeNav    = 'leads';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Leads' => 'leads.php', $lead['lead_name'] => null];
-$pageActions  = '<a href="deal_form.php?lead_id=' . $id . '" class="btn btn-primary"><i class="bi bi-kanban me-1"></i>Create deal</a>'
-    . '<a href="task_form.php?lead_id=' . $id . '" class="btn btn-outline-primary"><i class="bi bi-check2-square me-1"></i>Add task</a>'
-    . '<a href="activity_form.php?lead_id=' . $id . '" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Log activity</a>'
-    . ($canEdit ? '<a href="lead_form.php?id=' . $id . '" class="btn btn-outline-secondary"><i class="bi bi-pencil me-1"></i>Edit</a>' : '');
+$pageActions = [
+    ['label' => 'Create deal', 'href' => "deal_form.php?lead_id=$id", 'icon' => 'bi-kanban'],
+    ['label' => 'Add task', 'href' => "task_form.php?lead_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
+    ['label' => 'Log activity', 'href' => "activity_form.php?lead_id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-clock-history'],
+];
+if ($canEdit) {
+    $pageActions[] = ['label' => 'Edit', 'href' => "lead_form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
+}
 
 require __DIR__ . '/includes/header.php';
 ?>

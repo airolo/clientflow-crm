@@ -19,7 +19,6 @@ if (!$account) {
 
 $errors  = take_errors();
 $old     = take_old();
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();

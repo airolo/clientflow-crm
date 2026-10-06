@@ -46,7 +46,6 @@ $errors     = take_errors();
 $old        = take_old();
 $userId     = (int) current_user_id();
 $isEdit     = $deal !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -128,7 +127,12 @@ $pageHeading  = $isEdit ? 'Edit deal' : ($presetLeadId > 0 && !$isEdit ? 'Conver
 $pageSubtitle = $isEdit ? $deal['deal_title'] : 'Track an opportunity through the pipeline';
 $activeNav    = 'pipeline';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Pipeline' => 'pipeline.php', $isEdit ? 'Edit' : 'Add' => null];
-$pageActions  = '<a href="pipeline.php" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back to pipeline</a>';
+$pageActions = [[
+    'label' => 'Back to pipeline',
+    'href' => 'pipeline.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

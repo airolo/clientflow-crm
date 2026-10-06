@@ -20,19 +20,19 @@ $tasks      = client_tasks($id);
 $activities = client_activities($id, 15);
 $summary    = client_deal_summary($id);
 $canEdit    = can_manage($client);
-$userId     = (int) current_user_id();
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 $pageTitle   = $client['company_name'];
 $pageHeading = $client['company_name'];
 $pageSubtitle = $client['contact_person'] . ' · ' . ($client['email'] ?: 'no email on file');
 $activeNav   = 'clients';
 $breadcrumbs = ['Dashboard' => 'index.php', 'Clients' => 'clients.php', $client['company_name'] => null];
-$pageActions = '<a href="activity_form.php?client_id=' . $id . '" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Log activity</a>'
-    . '<a href="task_form.php?client_id=' . $id . '" class="btn btn-outline-primary"><i class="bi bi-check2-square me-1"></i>Add task</a>'
-    . ($canEdit
-        ? '<a href="client_form.php?id=' . $id . '" class="btn btn-outline-secondary"><i class="bi bi-pencil me-1"></i>Edit</a>'
-        : '');
+$pageActions = [
+    ['label' => 'Log activity', 'href' => "activity_form.php?client_id=$id", 'icon' => 'bi-plus-lg'],
+    ['label' => 'Add task', 'href' => "task_form.php?client_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
+];
+if ($canEdit) {
+    $pageActions[] = ['label' => 'Edit', 'href' => "client_form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
+}
 
 require __DIR__ . '/includes/header.php';
 ?>

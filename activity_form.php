@@ -37,7 +37,6 @@ $leads    = lead_options();
 $errors   = take_errors();
 $old      = take_old();
 $isEdit   = $activity !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar((int) current_user_id());
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -98,7 +97,12 @@ $pageHeading  = $isEdit ? 'Edit activity' : 'Log activity';
 $pageSubtitle = $isEdit ? $activity['title'] : ($scopeLabel !== '' ? 'For ' . $scopeLabel : 'Record a client interaction');
 $activeNav    = 'activities';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Activities' => 'activities.php', $isEdit ? 'Edit' : 'New' => null];
-$pageActions  = '<a href="activities.php" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back to activity</a>';
+$pageActions = [[
+    'label' => 'Back to activity',
+    'href' => 'activities.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

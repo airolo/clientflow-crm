@@ -30,7 +30,6 @@ $errors   = take_errors();
 $old      = take_old();
 $userId   = (int) current_user_id();
 $isEdit   = $task !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -90,7 +89,12 @@ $pageHeading  = $isEdit ? 'Edit task' : 'Add task';
 $pageSubtitle = $isEdit ? $task['title'] : 'Schedule a follow-up or reminder';
 $activeNav    = 'tasks';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Tasks' => 'tasks.php', $isEdit ? 'Edit' : 'Add' => null];
-$pageActions  = '<a href="tasks.php" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back to tasks</a>';
+$pageActions = [[
+    'label' => 'Back to tasks',
+    'href' => 'tasks.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

@@ -10,8 +10,6 @@ require_login();
 
 $stageFilter  = (string) ($_GET['stage'] ?? '');
 $ownerFilter  = (int) ($_GET['assigned_to'] ?? 0);
-$userId       = (int) current_user_id();
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 // Validate filters before using them in a query.
 if (!is_valid_option($stageFilter, deal_stages())) {
@@ -37,7 +35,9 @@ $pageHeading  = 'Sales pipeline';
 $pageSubtitle = $openCount . ' open deal' . ($openCount === 1 ? '' : 's') . ' worth ' . money($openValue);
 $activeNav    = 'pipeline';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Pipeline' => null];
-$pageActions  = '<a href="deal_form.php" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add deal</a>';
+$pageActions = [
+    ['label' => 'Add deal', 'href' => 'deal_form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+];
 
 require __DIR__ . '/includes/header.php';
 ?>
@@ -104,7 +104,7 @@ require __DIR__ . '/includes/header.php';
             'tint'  => 'danger',
             'hint'  => $winRate['lost_count'] . ' deals lost',
         ],
-    ];
+];
     foreach ($summaryCards as $card):
     ?>
         <div class="col-12 col-sm-6 col-xl-3">

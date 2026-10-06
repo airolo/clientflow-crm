@@ -8,7 +8,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 require_login();
 
-$userId   = (int) current_user_id();
 $summary  = report_summary();
 $winRate  = report_win_rate();
 $totals   = deal_stage_totals();
@@ -18,7 +17,6 @@ $recent   = activity_recent(7);
 $dueSoon  = task_due_soon(5);
 $topDeals = deal_top_open(5);
 $newLeads = lead_unconverted(5);
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 $pageTitle   = 'Dashboard';
 $pageHeading = 'Welcome back, ' . current_user()['name'];

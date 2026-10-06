@@ -166,6 +166,7 @@ ClientFlow/
 ├── includes/
 │   ├── bootstrap.php         # single entry point, required by every page
 │   ├── functions.php         # escaping, flashes, CSRF, badges, pagination
+│   ├── list_page.php         # shared filter bars, table headers, row actions
 │   ├── auth.php              # session hardening + require_login/require_admin/can_manage
 │   ├── header.php            # <head>, page title, breadcrumbs, opens <main>
 │   ├── navbar.php            # top bar with user dropdown
@@ -174,6 +175,7 @@ ClientFlow/
 │   └── footer.php            # closes <main>, footer, confirm modal, scripts
 │
 ├── models/                   # every SQL statement lives here
+│   ├── ListQuery.php         # shared list-query builder and filter helpers
 │   ├── UserModel.php
 │   ├── ClientModel.php
 │   ├── LeadModel.php
@@ -181,6 +183,9 @@ ClientFlow/
 │   ├── TaskModel.php
 │   ├── ActivityModel.php
 │   └── ReportModel.php
+│
+├── tools/
+│   └── regression.ps1        # end-to-end suite, drives the running site
 │
 ├── assets/
 │   ├── css/style.css         # custom styles layered on Bootstrap
@@ -203,15 +208,23 @@ ClientFlow/
 ├── reports.php
 ├── users.php    user_form.php    user_action.php
 │
+├── .htaccess                 # blocks database.sql, README, VCS dirs, listings
 ├── database.sql              # schema + demo data
 └── README.md
 ```
 
-Two conventions keep this readable:
+Three conventions keep this readable:
 
 - **Pages hold presentation and request handling only.** Any SQL is in `models/`.
 - **`*_form.php` handles both create and edit**, and **`*_action.php` handles POST-only actions**
   such as delete or status change, so list pages contain no logic beyond display.
+- **Repeated markup goes through `includes/list_page.php`.** `render_filter_bar()`,
+  `render_th()`, `render_post_form_open()` and `render_table_footer()` replaced five copies of
+  the same filter bar and table scaffolding, which is also why every column header now carries
+  `scope="col"` and every icon-only control an `aria-label`.
+
+Likewise `models/ListQuery.php` replaces the four near-identical `*_list()` functions: each model
+now declares only its own search columns, filters, joins and sortable columns.
 
 ---
 
@@ -312,7 +325,9 @@ saving does not resubmit, and success messages survive the hop through the sessi
 | `take_errors()` / `take_old()` / `old_value()` | Validation round-trip |
 | `sort_link()` / `order_by()` | Sortable headers with a whitelisted `ORDER BY` |
 | `render_pagination()` / `result_summary()` | Pagination UI |
-| `empty_state()` | Consistent empty-state block |
+| `render_filter_bar()` / `render_th()` | Shared list-page markup |
+| `length_errors()` | Column-width validation |
+| `empty_state()` / `render_list_empty_state()` | Consistent empty-state block |
 | `money()` / `money_short()` / `nice_date()` / `time_ago()` | Formatting |
 | `client_status_badge()` etc. | Coloured status pills |
 | `require_login()` / `require_admin()` / `can_manage($row)` | Authorization |
@@ -336,12 +351,24 @@ saving does not resubmit, and success messages survive the hop through the sessi
 - **Authorization** — every page calls `require_login()`; admin areas call `require_admin()`. Staff
   can only modify records they created or are assigned to, enforced in `can_manage()` and checked
   again in the `*_action.php` handlers, not just hidden in the UI.
-- **Validation** — server-side only, with type, length, format and enum checks. Enum values from
-  `$_POST` are whitelisted before use; foreign keys are confirmed to exist before saving.
+- **Validation** — server-side only, with type, length, format and enum checks. Length limits
+  mirror the `VARCHAR` widths in `database.sql` (see `length_errors()`), because the HTML
+  `maxlength` attribute is a convenience rather than a control: a direct POST bypasses it and
+  would otherwise overflow the column. Enum values from `$_POST` are whitelisted before use;
+  foreign keys are confirmed to exist before saving.
+- **Error handling** — one handler in `bootstrap.php` catches every uncaught `Throwable`, writes
+  the class, file, line and message to the Apache error log, and renders a plain page. No SQL,
+  file paths or stack traces reach the browser.
+- **Transactions** — the two-step lead→deal conversion runs inside `beginTransaction()` /
+  `commit()`, rolled back on failure, so a deal can never exist with its lead unadvanced.
 - **Login errors** are deliberately identical for an unknown email and a wrong password, so the
   form cannot be used to discover which accounts exist.
 - **Redirects** — post-action `return` values are whitelisted against known internal pages, closing
   off open-redirect abuse.
+- **Web exposure** — `.htaccess` disables directory listings and denies `database.sql` (which
+  contains password hashes), `README.md` (which contains demo credentials), the `config/`,
+  `models/` and `includes/` directories, and any `.git`/`.svn`/`.hg` directory. Those files stay in
+  the web root for setup convenience and are simply never served.
 - **Output** — the database layer catches connection errors, logs the detail server-side and shows
   the user a plain-language troubleshooting page.
 
@@ -359,10 +386,13 @@ limiting, remember-me tokens, CSRF-per-request tokens, and an audit log of who c
 | Rows per page | `config/config.php` (`ROWS_PER_PAGE`) |
 | Brand colours | `assets/css/style.css` (`:root` variables at the top) |
 | Sidebar links | `includes/sidebar.php` (`$navItems`) |
+| Page-header buttons | `$pageActions` in each page — a structured array, rendered by `render_page_actions()` |
+| Column max lengths | `database.sql` **and** the `length_errors()` call in the matching `*_validate()` |
 | Client statuses | `functions.php` (`client_statuses()`) |
 | Pipeline stages | `functions.php` (`deal_stages()`) |
 | Forecast probabilities | `models/ReportModel.php` (`report_win_rate()`) |
-| Table columns | `SELECT` in the matching model + the `<thead>` in the page |
+| List filters | the `filters` array in the model's `*_list()` call |
+| Table columns | `select` in the model's `list_query()` config + the `<thead>` in the page |
 | Dashboard tiles | the `$tiles` array near the top of `index.php` |
 | Product name | `config/config.php` (`APP_NAME`, `APP_SHORT`) |
 
@@ -408,6 +438,25 @@ with `utf8_general_ci` throughout `database.sql`.
 
 **Want a clean slate**
 Re-import `database.sql`. It drops and recreates everything back to the demo state.
+
+---
+
+## Running the tests
+
+`tools/regression.ps1` drives the running site over HTTP and asserts on real behaviour: every
+page under both roles, CRUD lifecycles, validation rejections, CSRF, stored and reflected XSS, SQL
+injection attempts, flash messages, accessibility spot checks and orphaned rows. It also reads
+the Apache error log after each request rather than trusting the response body, because
+`display_errors` can be on and still hide warnings from a body-level scan.
+
+```powershell
+# XAMPP running, project in htdocs, database.sql imported
+powershell -ExecutionPolicy Bypass -File tools\regression.ps1
+```
+
+It cleans up everything it creates and exits non-zero on failure, so it works as a pre-commit
+check. It needs PowerShell 5.1 (bundled with Windows) and `mysql.exe` on the path as
+`C:\xampp\mysql\bin\mysql.exe`; override with `-BaseUrl` if your folder is named differently.
 
 ---
 

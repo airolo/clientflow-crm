@@ -55,7 +55,17 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteRule ^(?:config|models|includes)(?:/|$) - [F,L]
+
+    # Version-control internals must never be served, even if the project
+    # folder is inside the document root and a repo was initialised there.
+    RewriteRule (^|/)\.git(?:/|$) - [F,L]
+    RewriteRule (^|/)\.(?:svn|hg)(?:/|$) - [F,L]
 </IfModule>
+
+# Same protection without mod_rewrite.
+RedirectMatch 404 /\.git
+RedirectMatch 404 /\.svn
+RedirectMatch 404 /\.hg
 
 # Sensible hardening for the pages that do get served.
 <IfModule mod_headers.c>

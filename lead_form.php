@@ -24,7 +24,6 @@ $errors  = take_errors();
 $old     = take_old();
 $userId  = (int) current_user_id();
 $isEdit  = $lead !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -73,7 +72,12 @@ $activeNav   = 'leads';
 $breadcrumbs = $isEdit
     ? ['Dashboard' => 'index.php', 'Leads' => 'leads.php', $lead['lead_name'] => 'lead_view.php?id=' . $id, 'Edit' => null]
     : ['Dashboard' => 'index.php', 'Leads' => 'leads.php', 'Add' => null];
-$pageActions = '<a href="' . ($isEdit ? 'lead_view.php?id=' . $id : 'leads.php') . '" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back</a>';
+$pageActions = [[
+    'label' => 'Back',
+    'href' => $isEdit ? "lead_view.php?id=$id" : 'leads.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

@@ -26,7 +26,6 @@ $errors  = take_errors();
 $old     = take_old();
 $userId  = (int) current_user_id();
 $isEdit  = $client !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -77,7 +76,12 @@ $activeNav   = 'clients';
 $breadcrumbs = $isEdit
     ? ['Dashboard' => 'index.php', 'Clients' => 'clients.php', $client['company_name'] => 'client_view.php?id=' . $id, 'Edit' => null]
     : ['Dashboard' => 'index.php', 'Clients' => 'clients.php', 'Add' => null];
-$pageActions = '<a href="' . ($isEdit ? 'client_view.php?id=' . $id : 'clients.php') . '" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back</a>';
+$pageActions = [[
+    'label' => 'Back',
+    'href' => $isEdit ? "client_view.php?id=$id" : 'clients.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

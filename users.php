@@ -8,41 +8,23 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 require_admin();
 
-$search   = trim((string) ($_GET['search'] ?? ''));
-$role     = (string) ($_GET['role'] ?? '');
-$page     = current_page_number();
-$perPage  = ROWS_PER_PAGE;
-$offset   = ($page - 1) * $perPage;
+$search = trim((string) ($_GET['search'] ?? ''));
+$role   = (string) ($_GET['role'] ?? '');
+$page   = current_page_number();
 
-$where = [];
-$params = [];
-if ($search !== '') {
-    $where[] = '(name LIKE ? OR email LIKE ?)';
-    $like = '%' . $search . '%';
-    array_push($params, $like, $like);
-}
-if ($role !== '' && in_array($role, ['admin', 'staff'], true)) {
-    $where[] = 'role = ?';
-    $params[] = $role;
-}
-$whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+$result = user_list([
+    'search' => $search,
+    'role'   => $role,
+    'page'   => $page,
+]);
 
-$countStmt = db()->prepare('SELECT COUNT(*) FROM users' . $whereSql);
-$countStmt->execute($params);
-$total = (int) $countStmt->fetchColumn();
-
-$stmt = db()->prepare(
-    'SELECT id, name, email, role, phone, is_active, created_at FROM users'
-    . $whereSql . ' ORDER BY role = "admin" DESC, name ASC LIMIT '
-    . $perPage . ' OFFSET ' . $offset
-);
-$stmt->execute($params);
-$users = $stmt->fetchAll();
+$users  = $result['rows'];
+$total  = $result['total'];
+$offset = $result['offset'];
 
 $errors  = take_errors();
 $old     = take_old();
 $userId  = (int) current_user_id();
-$sidebarPendingTasks = task_count_open_for_sidebar($userId);
 
 // A failed create posts back here with the errors; reopen the dialog so the
 // message is actually visible instead of silently doing nothing.
@@ -53,37 +35,26 @@ $pageHeading  = 'Users';
 $pageSubtitle = $total . ' account' . ($total === 1 ? '' : 's') . ' with access';
 $activeNav    = 'users';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Users' => null];
-$pageActions  = '<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newUserModal"><i class="bi bi-person-plus me-1"></i>Add user</button>';
+$pageActions = [[
+    'label' => 'Add user',
+    'tag' => 'button',
+    'icon' => 'bi-person-plus',
+    'attrs' => ['data-bs-toggle' => 'modal', 'data-bs-target' => '#newUserModal'],
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>
 
-<div class="card mb-3">
-    <div class="card-body filter-bar">
-        <form method="get" action="users.php" class="row g-2 align-items-end">
-            <div class="col-12 col-md-6">
-                <label for="search" class="form-label">Search</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="search" name="search" id="search" class="form-control"
-                           value="<?= e($search) ?>" placeholder="Name or email">
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <label for="role" class="form-label">Role</label>
-                <select name="role" id="role" class="form-select">
-                    <option value="">All roles</option>
-                    <option value="admin" <?= $role === 'admin' ? 'selected' : '' ?>>Admin</option>
-                    <option value="staff" <?= $role === 'staff' ? 'selected' : '' ?>>Staff</option>
-                </select>
-            </div>
-            <div class="col-6 col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-funnel me-1"></i>Filter</button>
-                <a href="users.php" class="btn btn-light border" title="Clear"><i class="bi bi-x-lg"></i></a>
-            </div>
-        </form>
-    </div>
-</div>
+<?php render_filter_bar([
+    'action' => 'users.php',
+    'fields' => [
+        ['type' => 'search', 'name' => 'search', 'label' => 'Search', 'col' => 'col-12 col-md-6',
+         'value' => $search, 'placeholder' => 'Name or email'],
+        ['type' => 'select', 'name' => 'role', 'label' => 'Role', 'col' => 'col-6 col-md-3',
+         'value' => $role, 'options' => ['admin' => 'Admin', 'staff' => 'Staff'], 'options_label' => 'All roles'],
+    ],
+    'actions_col' => 'col-6 col-md-3',
+]); ?>
 
 <div class="card">
     <div class="card-body p-0">
@@ -94,13 +65,13 @@ require __DIR__ . '/includes/header.php';
                 <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>User</th>
-                            <th>Role</th>
-                            <th>Phone</th>
-                            <th>Status</th>
-                            <th>Workload</th>
-                            <th>Joined</th>
-                            <th class="row-actions">Actions</th>
+                            <?php render_th('User'); ?>
+                            <?php render_th('Role'); ?>
+                            <?php render_th('Phone'); ?>
+                            <?php render_th('Status'); ?>
+                            <?php render_th('Workload'); ?>
+                            <?php render_th('Joined'); ?>
+                            <?php render_th('Actions', null, 'row-actions'); ?>
                         </tr>
                     </thead>
                     <tbody>
@@ -152,16 +123,18 @@ require __DIR__ . '/includes/header.php';
                             <td><span class="small text-secondary"><?= e(nice_date($row['created_at'])) ?></span></td>
                             <td class="row-actions">
                                 <div class="btn-group btn-group-sm">
-                                    <a href="user_form.php?id=<?= (int) $row['id'] ?>" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+                                    <a href="user_form.php?id=<?= (int) $row['id'] ?>" class="btn btn-outline-secondary"
+                                       title="Edit" aria-label="Edit <?= e($row['name']) ?>"><i class="bi bi-pencil"></i></a>
                                     <?php if ((int) $row['id'] !== $userId): ?>
-                                        <form method="post" action="user_action.php" class="m-0">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
-                                            <button type="submit" class="btn btn-outline-danger"
-                                                    data-confirm="Delete <?= e($row['name']) ?>? Their records stay but become unassigned."
-                                                    title="Delete"><i class="bi bi-trash"></i></button>
-                                        </form>
+                                        <?php render_post_form_open([
+                                            'action_url' => 'user_action.php',
+                                            'action' => 'delete',
+                                            'id' => (int) $row['id'],
+                                        ]); ?>
+                                        <button type="submit" class="btn btn-outline-danger"
+                                                data-confirm="Delete <?= e($row['name']) ?>? Their records stay but become unassigned."
+                                                title="Delete" aria-label="Delete <?= e($row['name']) ?>"><i class="bi bi-trash"></i></button>
+                                        <?php render_post_form_close(); ?>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -174,12 +147,7 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<?php if ($users): ?>
-    <div class="table-footer">
-        <div><?= result_summary($total, $offset, count($users)) ?></div>
-        <?= render_pagination($total) ?>
-    </div>
-<?php endif; ?>
+<?php render_table_footer($total, $offset, count($users)); ?>
 
 <!-- ---------- Create user modal ---------- -->
 <div class="modal fade" id="newUserModal" tabindex="-1" aria-labelledby="newUserModalLabel" aria-hidden="true">

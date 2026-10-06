@@ -18,7 +18,6 @@ if ($id > 0 && !$target) {
 $errors  = take_errors();
 $old     = take_old();
 $isEdit  = $target !== null;
-$sidebarPendingTasks = task_count_open_for_sidebar((int) current_user_id());
 
 /** Shared validation for the create and edit user forms. */
 function validate_user_input(array $data, ?int $exceptId = null): array
@@ -108,7 +107,12 @@ $pageHeading  = $isEdit ? 'Edit user' : 'New user';
 $pageSubtitle = $isEdit ? $target['name'] : 'Create a login account';
 $activeNav    = 'users';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Users' => 'users.php', $isEdit ? 'Edit' : null];
-$pageActions  = '<a href="users.php" class="btn btn-light border"><i class="bi bi-arrow-left me-1"></i>Back to users</a>';
+$pageActions = [[
+    'label' => 'Back to users',
+    'href' => 'users.php',
+    'variant' => 'light border',
+    'icon' => 'bi-arrow-left',
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

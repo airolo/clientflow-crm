@@ -20,7 +20,6 @@ $mix      = report_activity_mix();
 $wonLost  = report_won_lost();
 $owners   = report_clients_by_owner();
 $wonDeals = deal_won_list(8);
-$sidebarPendingTasks = task_count_open_for_sidebar((int) current_user_id());
 
 $maxStageValue = max(1.0, ...array_map(fn($s) => $s['total_value'], $stages));
 $maxLeadTotal  = max(1, ...array_map(fn($s) => $s['total'], $leads));
@@ -32,7 +31,14 @@ $pageHeading  = 'Reports';
 $pageSubtitle = 'Sales performance, funnel health and team activity';
 $activeNav    = 'reports';
 $breadcrumbs  = ['Dashboard' => 'index.php', 'Reports' => null];
-$pageActions  = '<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print</button>';
+$pageActions = [[
+    'label' => 'Print',
+    'tag' => 'button',
+    'variant' => 'outline-secondary',
+    'icon' => 'bi-printer',
+    // Static application code, not user input.
+    'attrs' => ['onclick' => 'window.print()'],
+]];
 
 require __DIR__ . '/includes/header.php';
 ?>

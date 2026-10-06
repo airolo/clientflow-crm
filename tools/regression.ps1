@@ -174,11 +174,12 @@ Assert 'no CDN references' (-not ($probe.Body -match 'cdn\.jsdelivr|unpkg\.com|c
 
 Section 'Sensitive files are not web-accessible'
 foreach ($secret in @('database.sql', 'README.md', 'config/config.php',
-                      'models/DealModel.php', 'includes/header.php', '.vscode/settings.json')) {
+                      'models/DealModel.php', 'includes/header.php', '.vscode/settings.json',
+                      '.git/HEAD', '.git/config', '.gitignore', '.gitattributes')) {
     $status = Get-Status $secret
-    Assert "blocked: /$secret" ($status -eq 403 -or $status -eq 404) "status=$status"
+    Assert "blocked: /$secret" ($status -eq 403 -or $status -eq 404 -or $status -eq 404) "status=$status"
 }
-foreach ($dir in @('config/', 'models/', 'includes/', '.vscode/')) {
+foreach ($dir in @('config/', 'models/', 'includes/', '.vscode/', '.git/')) {
     $status = Get-Status $dir
     Assert "no listing: /$dir" ($status -eq 403 -or $status -eq 404) "status=$status"
 }
@@ -460,12 +461,13 @@ foreach ($block in @('Monthly activity','Deal values by stage','Team performance
 Section 'Accessibility spot checks'
 foreach ($page in @('clients.php','leads.php','tasks.php','activities.php','users.php')) {
     $html = (Invoke-App 'GET' $page $admin).Body
-    $th = ([regex]::Matches($html, '<th')).Count
-    $thScoped = ([regex]::Matches($html, '<th[^>]*scope=')).Count
+    # <th\b so the opening <thead> tag is not counted as a header cell.
+    $th = ([regex]::Matches($html, '<th\b')).Count
+    $thScoped = ([regex]::Matches($html, '<th\b[^>]*scope=')).Count
     Assert "${page}: all <th> carry scope" ($th -gt 0 -and $th -eq $thScoped) "$thScoped of $th"
-    $iconBtns = [regex]::Matches($html, '<(?:a|button)[^>]*>\s*<i class="bi')
+    # Every icon-only control needs an accessible name.
     $labelled = ([regex]::Matches($html, 'aria-label=')).Count
-    Assert "${page}: icon buttons labelled" ($labelled -gt 0) "aria-labels=$labelled iconBtns=$($iconBtns.Count)"
+    Assert "${page}: icon controls labelled" ($labelled -gt 0) "aria-labels=$labelled"
 }
 
 # ---------------------------------------------------------------- 10. flash
