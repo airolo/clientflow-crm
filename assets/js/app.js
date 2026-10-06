@@ -120,6 +120,22 @@
     });
 
     /**
+     * Show/hide password toggle, used on the sign-in and change-password screens.
+     * Lives here rather than in an inline <script> so the Content-Security-Policy
+     * can keep script-src 'self' with no inline exceptions.
+     */
+    var togglePassword = document.getElementById('togglePassword');
+    if (togglePassword) {
+        togglePassword.addEventListener('click', function () {
+            var input = document.getElementById('password');
+            var showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            this.innerHTML = '<i class="bi bi-eye' + (showing ? '' : '-slash') + '"></i>';
+            this.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+        });
+    }
+
+    /**
      * Filter chips on the task board: click a status to filter instantly.
      */
     var taskFilterSelect = document.getElementById('taskQuickFilter');

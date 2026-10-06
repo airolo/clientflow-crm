@@ -68,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'phone'    => post_str('phone'),
         // The form posts a hidden "0" plus a checkbox "1", so compare the value.
         'is_active' => post_str('is_active', '0') === '1' ? 1 : 0,
+        'must_change_password' => post_str('must_change_password', '0') === '1' ? 1 : 0,
     ];
 
     $errors = validate_user_input($data, $isEdit ? $id : null);
@@ -193,6 +194,22 @@ require __DIR__ . '/../views/header.php';
                             <?php if ($m = field_error($errors, 'is_active')): ?>
                                 <div class="invalid-feedback d-block"><?= e($m) ?></div>
                             <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input type="hidden" name="must_change_password" value="0">
+                            <input class="form-check-input" type="checkbox"
+                                   name="must_change_password" id="must_change_password" value="1"
+                                   <?= (string) old_value($old, $record, 'must_change_password', '0') === '1' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="must_change_password">
+                                Must set a new password at next sign-in
+                            </label>
+                            <div class="form-text">
+                                Checked automatically when you set a password. The account is held on the
+                                change-password screen until it is done.
+                            </div>
                         </div>
                     </div>
                 </div>

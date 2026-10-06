@@ -38,7 +38,10 @@ set_exception_handler(function (Throwable $e): void {
     echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
         . '<meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>Something went wrong</title>'
-        . '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">'
+        // Served from the vendored copy rather than a CDN, so an error page does
+        // not depend on the network and does not leak the visitor's IP address
+        // and user agent to a third party at exactly the moment something broke.
+        . '<link href="' . e(url('assets/vendor/css/bootstrap.min.css')) . '" rel="stylesheet">'
         . '</head><body class="bg-light"><div class="container py-5" style="max-width:40rem">'
         . '<div class="card shadow-sm"><div class="card-body p-4">'
         . '<h1 class="h4 mb-3">Something went wrong</h1>'
@@ -52,6 +55,7 @@ set_exception_handler(function (Throwable $e): void {
 
 // Models hold every database query, so pages stay presentation-only.
 require_once __DIR__ . '/models/ListQuery.php';
+require_once __DIR__ . '/models/LoginAttemptModel.php';
 require_once __DIR__ . '/models/UserModel.php';
 require_once __DIR__ . '/models/ClientModel.php';
 require_once __DIR__ . '/models/LeadModel.php';

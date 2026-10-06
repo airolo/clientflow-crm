@@ -135,6 +135,14 @@ if ($probe.Code -ne 200) {
     exit 1
 }
 
+# Seeded accounts are flagged must_change_password = 1, so signing in would
+# land on auth/change_password.php instead of the app. Clear the flag for the
+# two accounts this suite drives, and assert the flag is restored at the end.
+# The forced-change behaviour itself is covered by its own section below.
+$flaggedBefore = Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',must_change_password) ORDER BY id)
+                             FROM users WHERE id IN (1,2);"
+Invoke-Sql "UPDATE users SET must_change_password = 0 WHERE id IN (1,2);" | Out-Null
+
 $admin = New-Object System.Net.CookieContainer
 $adminLogin = Invoke-App 'POST' 'auth/login.php' $admin @{
     _token = (Get-Token 'auth/login.php' $admin)
@@ -217,6 +225,94 @@ Invoke-App 'POST' 'auth/login.php' $unknown @{
     _token = (Get-Token 'auth/login.php' $unknown); email = 'nobody@nowhere.test'; password = 'x'
 } | Out-Null
 Assert 'unknown email same error (no enumeration)' ((Invoke-App 'GET' 'auth/login.php' $unknown).Body -match 'do not match our records')
+
+# ---------------------------------------------------------------- 3b. forced password change
+
+Section 'Forced password change'
+# Uses a throwaway account so the seeded passwords are never mutated.
+Invoke-Sql "DELETE FROM users WHERE email = 'forced@regression.test';
+            INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
+            VALUES ('Forced Regression', 'forced@regression.test',
+                    '`$2y`$10`$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW',
+                    'staff', NULL, 1, 1);" | Out-Null
+
+$forced = New-Object System.Net.CookieContainer
+Invoke-App 'POST' 'auth/login.php' $forced @{
+    _token = (Get-Token 'auth/login.php' $forced)
+    email = 'forced@regression.test'; password = 'staff123'
+} | Out-Null
+
+Assert 'flagged account lands on change_password' (
+    (Invoke-App 'GET' 'index.php' $forced).Location -match 'change_password\.php$')
+Assert 'flagged account held off the client list' (
+    (Invoke-App 'GET' 'clients/index.php' $forced).Location -match 'change_password\.php$')
+Assert 'flagged account held off reports' (
+    (Invoke-App 'GET' 'reports/index.php' $forced).Location -match 'change_password\.php$')
+
+$cp = Invoke-App 'GET' 'auth/change_password.php' $forced
+Assert 'change_password page renders' ($cp.Code -eq 200)
+Assert 'change_password rejects a wrong current password' (
+    (Invoke-App 'POST' 'auth/change_password.php' $forced @{
+        _token = (Get-Token 'auth/change_password.php' $forced)
+        current_password = 'wrong'; new_password = 'BrandNewPass1!'; confirm_password = 'BrandNewPass1!'
+    }).Location -match 'change_password\.php$')
+Assert 'flag still set after a failed change' (
+    (Invoke-Sql "SELECT must_change_password FROM users WHERE email='forced@regression.test';") -eq '1')
+
+$newPw = 'Regression' + (Get-Random -Minimum 10000 -Maximum 99999) + '!'
+$done = Invoke-App 'POST' 'auth/change_password.php' $forced @{
+    _token = (Get-Token 'auth/change_password.php' $forced)
+    current_password = 'staff123'; new_password = $newPw; confirm_password = $newPw
+}
+Assert 'successful change redirects away from change_password' ($done.Location -match 'index\.php$')
+Assert 'flag cleared in the database' (
+    (Invoke-Sql "SELECT must_change_password FROM users WHERE email='forced@regression.test';") -eq '0')
+Assert 'dashboard now reachable' ((Invoke-App 'GET' 'index.php' $forced).Code -eq 200)
+
+$oldPw = New-Object System.Net.CookieContainer
+Invoke-App 'POST' 'auth/login.php' $oldPw @{
+    _token = (Get-Token 'auth/login.php' $oldPw)
+    email = 'forced@regression.test'; password = 'staff123'
+} | Out-Null
+Assert 'the old password no longer signs in' (
+    (Invoke-App 'GET' 'auth/login.php' $oldPw).Body -match 'do not match our records')
+
+# ---------------------------------------------------------------- 3c. throttling
+
+Section 'Sign-in throttling'
+Invoke-Sql "DELETE FROM login_attempts;" | Out-Null
+
+# A failed sign-in redirects back to the login page with the message in the
+# flash, which renders exactly once - so each attempt needs a fresh session and
+# a follow-up GET.
+function Try-SignIn([string]$Email, [string]$Password) {
+    $s = New-Object System.Net.CookieContainer
+    Invoke-App 'POST' 'auth/login.php' $s @{
+        _token = (Get-Token 'auth/login.php' $s); email = $Email; password = $Password
+    } | Out-Null
+    return (Invoke-App 'GET' 'auth/login.php' $s).Body
+}
+
+$lockedOutAt = 0
+for ($i = 1; $i -le 8; $i++) {
+    if ((Try-SignIn 'throttle@regression.test' "guess-$i") -match 'Too many failed sign-in attempts') {
+        $lockedOutAt = $i; break
+    }
+}
+Assert 'repeated failures are throttled' ($lockedOutAt -gt 0) "locked out at attempt $lockedOutAt"
+Assert 'failures were recorded for auditing' (
+    [int](Invoke-Sql "SELECT COUNT(*) FROM login_attempts WHERE email='throttle@regression.test' AND succeeded=0;") -ge 5)
+Assert 'throttle still refuses the next attempt' (
+    (Try-SignIn 'throttle@regression.test' 'another-guess') -match 'Too many failed sign-in attempts')
+
+Invoke-Sql "DELETE FROM login_attempts;" | Out-Null
+$good = New-Object System.Net.CookieContainer
+Invoke-App 'POST' 'auth/login.php' $good @{
+    _token = (Get-Token 'auth/login.php' $good)
+    email = 'admin@clientflow.test'; password = 'admin123'
+} | Out-Null
+Assert 'successful sign-in is logged' (
+    [int](Invoke-Sql "SELECT COUNT(*) FROM login_attempts WHERE email='admin@clientflow.test' AND succeeded=1;") -ge 1)
 
 # ---------------------------------------------------------------- 4. pages
 
@@ -534,7 +630,9 @@ Invoke-Sql "DELETE FROM clients WHERE company_name LIKE 'Regression%'
                         OR deal_title LIKE 'Flash%';
             DELETE FROM activities WHERE title LIKE 'Regression%'
                         OR title LIKE 'Flash%';
-            DELETE FROM users   WHERE email LIKE '%Regression%';" | Out-Null
+            DELETE FROM users   WHERE email LIKE '%Regression%'
+                        OR email IN ('forced@regression.test', 'throttle@regression.test');
+            DELETE FROM login_attempts;" | Out-Null
 
 $after = Invoke-Sql "SELECT CONCAT(
     (SELECT COUNT(*) FROM users),    '/',
@@ -544,6 +642,11 @@ $after = Invoke-Sql "SELECT CONCAT(
     (SELECT COUNT(*) FROM tasks),    '/',
     (SELECT COUNT(*) FROM activities))"
 Assert 'row counts restored to baseline' ($after -eq $baseline) "before=$baseline after=$after"
+
+# Put the seeded forced-change flags back so the demo behaves as shipped.
+Invoke-Sql "UPDATE users SET must_change_password = 1 WHERE id IN (1,2);" | Out-Null
+Assert 'seeded accounts reflagged for password change' (
+    (Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',must_change_password) ORDER BY id) FROM users WHERE id IN (1,2);") -eq $flaggedBefore)
 
 $orphans = Invoke-Sql "SELECT CONCAT(
     (SELECT COUNT(*) FROM deals d WHERE d.client_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM clients c WHERE c.id=d.client_id)), '/',

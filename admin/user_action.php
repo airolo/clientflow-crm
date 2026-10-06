@@ -25,6 +25,7 @@ if ($action === 'create') {
         'role'      => post_str('role', 'staff'),
         'phone'     => post_str('phone'),
         'is_active' => 1,
+        'must_change_password' => post_str('must_change_password', '0') === '1' ? 1 : 0,
     ];
 
     $errors = [];

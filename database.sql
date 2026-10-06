@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS `tasks`;
 DROP TABLE IF EXISTS `deals`;
 DROP TABLE IF EXISTS `leads`;
 DROP TABLE IF EXISTS `clients`;
+DROP TABLE IF EXISTS `login_attempts`;
 DROP TABLE IF EXISTS `users`;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -32,11 +33,34 @@ CREATE TABLE `users` (
   `role`          ENUM('admin','staff') NOT NULL DEFAULT 'staff',
   `phone`         VARCHAR(40) DEFAULT NULL,
   `is_active`     TINYINT(1) NOT NULL DEFAULT 1,
+  -- Forces a password change before any other page is usable. Set by an admin
+  -- on reset, and automatically for seeded demo accounts on first sign-in.
+  `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_email` (`email`),
   KEY `idx_users_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =============================================================
+-- login_attempts  - brute-force throttling and sign-in audit trail
+-- =============================================================
+-- Every sign-in attempt is recorded, successful or not, so repeated failures
+-- from one address or against one account can be counted and refused.
+-- Rows older than the retention window are pruned opportunistically.
+CREATE TABLE `login_attempts` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `email`        VARCHAR(150) NOT NULL,
+  `ip`           VARCHAR(45) NOT NULL,
+  `succeeded`    TINYINT(1) NOT NULL DEFAULT 0,
+  `user_agent`   VARCHAR(255) DEFAULT NULL,
+  `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_attempts_email_time` (`email`, `attempted_at`),
+  KEY `idx_attempts_ip_time`    (`ip`, `attempted_at`),
+  KEY `idx_attempts_time`       (`attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -200,11 +224,14 @@ CREATE TABLE `activities` (
 -- The hashes below were produced with PHP password_hash().
 -- =============================================================
 
-INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `phone`, `is_active`) VALUES
-(1, 'Alex Morgan',   'admin@clientflow.test',  '$2y$10$aS0jDmjDd2ZcvT/kATwwi.V50h5rCQhgWKxaEWQ70AokxrBJkguou', 'admin', '+44 20 7946 0101', 1),
-(2, 'Sarah Bennett', 'sarah@clientflow.test', '$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0102', 1),
-(3, 'Marcus Reid',   'marcus@clientflow.test','$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0103', 1),
-(4, 'Priya Shah',    'priya@clientflow.test', '$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0104', 1);
+-- These four accounts are seeded with publicly known passwords, so each is
+-- flagged must_change_password = 1. The sign-in flow refuses to let any of
+-- them reach the rest of the app until the password has been changed.
+INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `phone`, `is_active`, `must_change_password`) VALUES
+(1, 'Alex Morgan',   'admin@clientflow.test',  '$2y$10$aS0jDmjDd2ZcvT/kATwwi.V50h5rCQhgWKxaEWQ70AokxrBJkguou', 'admin', '+44 20 7946 0101', 1, 1),
+(2, 'Sarah Bennett', 'sarah@clientflow.test', '$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0102', 1, 1),
+(3, 'Marcus Reid',   'marcus@clientflow.test','$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0103', 1, 1),
+(4, 'Priya Shah',    'priya@clientflow.test', '$2y$10$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW', 'staff', '+44 20 7946 0104', 1, 1);
 
 INSERT INTO `clients` (`id`, `company_name`, `contact_person`, `email`, `phone`, `address`, `status`, `assigned_to`, `notes`, `created_by`) VALUES
 (1,  'Northwind Logistics',  'Daniel Okafor',   'daniel@northwind-logistics.test',  '+44 161 496 0110', '12 Kingsway, Manchester M2 4WU',        'active',    2, 'Key account. Renews every March - start renewal conversation in January.', 1),

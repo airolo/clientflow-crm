@@ -43,7 +43,32 @@ define('APP_URL', (static function (): string {
     return '';
 })());
 
-// Demo credentials are surfaced on the login page for convenience.
+// --- Demo mode ---
+/**
+ * When true the sign-in page displays the seeded demo accounts, and the seeded
+ * passwords are permitted to sign in at all.
+ *
+ * This defaults to true ONLY on a loopback host (XAMPP/valet/local PHP server).
+ * Any deployment on a real hostname resolves to false, so the published
+ * credentials are never rendered to visitors and can never be used to sign in.
+ *
+ * Override by defining DEMO_MODE in app/config/config.local.php, which is
+ * git-ignored - set it to false when hosting a local copy on a shared machine.
+ */
+define('DEMO_MODE', (static function (): bool {
+    if (getenv('DEMO_MODE') !== false) {
+        return getenv('DEMO_MODE') === '1';
+    }
+    if (PHP_SAPI === 'cli') {
+        return true;
+    }
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    // Strip the port before comparing, so "localhost:8080" still matches.
+    $host = str_replace([':', '[', ']'], '', explode(',', $host)[0]);
+    return in_array($host, ['localhost', '127.0.0.1', '::1', ''], true);
+})());
+
+// Credentials shown in the demo panel. Only ever rendered when DEMO_MODE is true.
 define('DEMO_ADMIN_EMAIL', 'admin@clientflow.test');
 define('DEMO_ADMIN_PASS', 'admin123');
 define('DEMO_STAFF_EMAIL', 'sarah@clientflow.test');

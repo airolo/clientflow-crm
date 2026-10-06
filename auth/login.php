@@ -103,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
 
+<?php if (DEMO_MODE): ?>
         <div class="demo-cred mt-4">
             <div class="fw-semibold mb-2"><i class="bi bi-info-circle me-1"></i>Demo accounts</div>
             <div class="mb-1">
@@ -112,18 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <strong>Staff:</strong> <code><?= e(DEMO_STAFF_EMAIL) ?></code> / <code><?= e(DEMO_STAFF_PASS) ?></code>
             </div>
         </div>
+<?php endif; ?>
     </div>
 </div>
 
 <script src="<?= e(url('assets/vendor/js/bootstrap.bundle.min.js')) ?>"></script>
-<script>
-    // Show/hide password toggle
-    document.getElementById('togglePassword').addEventListener('click', function () {
-        var input = document.getElementById('password');
-        var showing = input.type === 'text';
-        input.type = showing ? 'password' : 'text';
-        this.innerHTML = '<i class="bi bi-eye' + (showing ? '' : '-slash') + '"></i>';
-    });
-</script>
+<script src="<?= e(url('assets/js/app.js')) ?>"></script>
 </body>
 </html>

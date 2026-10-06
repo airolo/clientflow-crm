@@ -74,17 +74,36 @@ function is_admin(): bool
  */
 function attempt_login(string $email, string $password): ?string
 {
+    $ip = client_ip();
+
+    // Throttling is checked before any hash comparison, so a run of guesses
+    // against one account or from one address stops being expensive.
+    if (login_attempt_locked_out($email, $ip)) {
+        $minutes = max(1, (int) ceil(login_attempt_retry_seconds($email) / 60));
+        return 'Too many failed sign-in attempts. Try again in about '
+            . $minutes . ' minute' . ($minutes === 1 ? '' : 's') . '.';
+    }
+
     $stmt = db()->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
     // Same generic message for unknown email and wrong password.
     if (!$user || !password_verify($password, (string) $user['password_hash'])) {
+        login_attempt_record($email, false);
+        login_attempt_prune();
         return 'Those credentials do not match our records.';
     }
     if ((int) $user['is_active'] !== 1) {
+        // Recorded, but the failure counter is deliberately not incremented:
+        // the password was correct, and an attacker should not be able to use
+        // this path to lock a real account out of its own login.
+        login_attempt_record($email, false);
         return 'This account has been deactivated. Please contact an administrator.';
     }
+
+    login_attempt_record($email, true);
+    login_attempt_clear($email);
 
     // New session id on privilege change (session fixation protection).
     session_regenerate_id(true);
@@ -95,10 +114,19 @@ function attempt_login(string $email, string $password): ?string
         'email' => $user['email'],
         'role'  => $user['role'],
     ];
+    // Carried from the database rather than trusted from the form, so the
+    // forced-change redirect cannot be bypassed by posting a different value.
+    $_SESSION['must_change_password'] = (int) ($user['must_change_password'] ?? 0) === 1;
     $_SESSION['_created_at'] = time();
     $_SESSION['_last_activity'] = time();
 
     return null;
+}
+
+/** True when the signed-in account must set a new password before continuing. */
+function must_change_password(): bool
+{
+    return !empty($_SESSION['must_change_password']);
 }
 
 /** Clear session data and the auth cookie. */
@@ -123,12 +151,23 @@ function logout_user(): void
 
 /**
  * Auth guard: every authenticated page calls this at the top.
+ *
+ * Also enforces the forced password change. Accounts seeded with published
+ * passwords, and accounts an admin has reset, are held on
+ * auth/change_password.php until the password is replaced.
  */
 function require_login(): void
 {
     if (!is_logged_in()) {
         flash('warning', 'Please sign in to continue.');
         redirect('login.php');
+    }
+
+    if (must_change_password()) {
+        $here = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($here !== 'change_password.php' && $here !== 'logout.php') {
+            redirect('auth/change_password.php');
+        }
     }
 }
 

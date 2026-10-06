@@ -147,12 +147,20 @@ credentials are printed on it.
 | Staff | `marcus@clientflow.test`| `staff123`  |
 | Staff | `priya@clientflow.test` | `staff123`  |
 
+**Each of these is flagged to force a password change on first sign-in.** Sign in with any of them
+and you go straight to a "choose a new password" screen; the rest of the app stays locked until
+that is done. That is deliberate — these passwords are published in `database.sql`, this README and
+the Git history, so they are not treated as a secret.
+
 Sign in as the admin to see everything, then as Sarah to see the reduced permission set: the Users
 section disappears from the sidebar, and records belonging to other staff cannot be edited or
 deleted.
 
 The seeded data: 12 clients, 14 leads, 12 deals spread across all six stages, 12 tasks (a few
 deliberately overdue) and 30 timestamped activities.
+
+> On a real hostname the sign-in page does not display these credentials at all. See
+> [Sign-in hardening](#sign-in-hardening).
 
 ---
 
@@ -430,10 +438,47 @@ saving does not resubmit, and success messages survive the hop through the sessi
 - **Output** — the database layer catches connection errors, logs the detail server-side and shows
   the user a plain-language troubleshooting page.
 
-Not included, because this is a local portfolio project: email sending, file uploads, rate
-limiting, remember-me tokens, CSRF-per-request tokens, and an audit log of who changed what. The
-last one is the most valuable gap: without it, an admin cannot investigate what a staff member
-changed or destroyed, and deletions leave no trace.
+### Sign-in hardening
+
+The seeded demo passwords are public knowledge — they appear in `database.sql`, in this README and
+in the repository history. Three controls keep that from becoming an account takeover:
+
+- **Demo mode is off on any real hostname.** `DEMO_MODE` (`app/config/config.php`) resolves to `true`
+  only on a loopback host, so the demo credentials are never *rendered* on a deployed site and can
+  never be used to sign in there. Override it in `app/config/config.local.php`, which is git-ignored.
+- **Forced password change.** Every account seeded with a demo password has
+  `must_change_password = 1`. `require_login()` holds that account on `auth/change_password.php`
+  until the password is replaced, so the published password cannot reach the app. An admin setting
+  or resetting someone's password sets the same flag, so the two never both know it.
+- **Throttling and lockout.** Every attempt is recorded in `login_attempts`, successful or not.
+  Five failures against one address, or twenty from one IP, within fifteen minutes, are refused
+  before the password is even compared (`app/models/LoginAttemptModel.php`). A successful sign-in
+  clears the counter for that email, so a genuine user who mistypes a few times is not left locked
+  out.
+
+An existing installation needs `migrations/001_login_hardening.sql`; a fresh install already has
+everything from `database.sql`.
+
+### Response headers
+
+`.htaccess` sets `Content-Security-Policy`, `Strict-Transport-Security`, `Permissions-Policy`,
+`X-Content-Type-Options`, `X-Frame-Options` and `Referrer-Policy`.
+
+The CSP is `'self'`-only because every asset is vendored under `assets/` — the app makes no
+third-party requests at all. That is what allows `script-src 'self'` with no inline exception, and
+it is why the password toggle lives in `assets/js/app.js` rather than an inline `<script>`.
+`style-src` still permits `'unsafe-inline'` for the inline style attributes Bootstrap components
+expect. The error page loads its stylesheet from `assets/vendor/` too, so a crash neither depends on
+the network nor sends the visitor's IP address to a CDN.
+
+### Not included
+
+Email sending, file uploads, remember-me tokens, CSRF-per-request tokens, an audit log of who
+changed what, contacts as separate records, and CSV import/export.
+
+The audit log is the most valuable gap. Without it an admin cannot investigate what a staff member
+changed or destroyed — and once soft delete lands, restoring a record preserves *what* was lost but
+still not *who* removed it.
 
 ---
 
@@ -515,18 +560,38 @@ Re-import `database.sql`. It drops and recreates everything back to the demo sta
 
 `tools/regression.ps1` drives the running site over HTTP and asserts on real behaviour: every
 page under both roles, CRUD lifecycles, validation rejections, CSRF, stored and reflected XSS, SQL
-injection attempts, flash messages, accessibility spot checks and orphaned rows. It also reads
-the Apache error log after each request rather than trusting the response body, because
-`display_errors` can be on and still hide warnings from a body-level scan.
+injection attempts, the forced password change, sign-in throttling, flash messages, accessibility
+spot checks and orphaned rows. It also reads the Apache error log after each request rather than
+trusting the response body, because `display_errors` can be on and still hide warnings from a
+body-level scan.
 
 ```powershell
 # XAMPP running, project in htdocs, database.sql imported
 powershell -ExecutionPolicy Bypass -File tools\regression.ps1
 ```
 
-It cleans up everything it creates and exits non-zero on failure, so it works as a pre-commit
-check. It needs PowerShell 5.1 (bundled with Windows) and `mysql.exe` on the path as
-`C:\xampp\mysql\bin\mysql.exe`; override with `-BaseUrl` if your folder is named differently.
+It cleans up everything it creates, restores the seeded demo state — including the
+`must_change_password` flags and the `login_attempts` table — and exits non-zero on failure, so it
+works as a pre-commit check. It needs PowerShell 5.1 (bundled with Windows) and `mysql.exe` on the
+path as `C:\xampp\mysql\bin\mysql.exe`; override with `-BaseUrl` if your folder is named
+differently.
+
+`tools/verify_phase1.ps1` covers the sign-in hardening workstream on its own (24 checks) and is
+handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`.
+
+---
+
+## Migrations
+
+Fresh installs get everything from `database.sql`. An **existing** installation picks up changes
+from `migrations/`, imported in order through phpMyAdmin:
+
+| File                          | Adds                                                |
+|-------------------------------|-----------------------------------------------------|
+| `001_login_hardening.sql`     | `users.must_change_password`, `login_attempts`      |
+| `002_soft_delete.sql`         | `deleted_at` / `deleted_by` on the five record tables |
+
+Each file is idempotent — running it twice is a no-op — and none of them drop data.
 
 ---
 

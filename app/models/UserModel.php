@@ -33,7 +33,7 @@ function user_list(array $options = []): array
     $validRole = in_array($role, ['admin', 'staff'], true);
 
     return list_query([
-        'select'  => 'u.id, u.name, u.email, u.role, u.phone, u.is_active, u.created_at',
+        'select'  => 'u.id, u.name, u.email, u.role, u.phone, u.is_active, u.must_change_password, u.created_at',
         'from'    => 'FROM users u',
         'search'  => ['u.name', 'u.email'],
         'options' => $options,
@@ -71,9 +71,13 @@ function user_options(): array
 /** Create a user; the password is hashed here. */
 function user_create(array $data): int
 {
+    // An admin can choose to have the new user set their own password on first
+    // sign-in, rather than handing over a password they will both know.
+    $mustChange = !empty($data['must_change_password']) ? 1 : 0;
+
     $stmt = db()->prepare(
-        'INSERT INTO users (name, email, password_hash, role, phone, is_active)
-         VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
         $data['name'],
@@ -82,6 +86,7 @@ function user_create(array $data): int
         $data['role'],
         null_if_empty($data['phone'] ?? null),
         !empty($data['is_active']) ? 1 : 0,
+        $mustChange,
     ]);
     return (int) db()->lastInsertId();
 }
@@ -100,7 +105,33 @@ function user_update_password(int $id, string $newPassword): void
     $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
 }
 
-/** Admin-only: change role / active flag / password reset. */
+/**
+ * Set a password directly and clear the forced-change flag.
+ *
+ * Used by the forced-change screen, which has already verified the old
+ * password, and by an admin resetting someone's password.
+ */
+function user_set_password(int $id, string $newPassword, bool $clearFlag = false): void
+{
+    $sql = 'UPDATE users SET password_hash = ?' . ($clearFlag ? ', must_change_password = 0' : '') . ' WHERE id = ?';
+    $stmt = db()->prepare($sql);
+    $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
+}
+
+/** True when the account still needs its password changed before continuing. */
+function user_must_change_password(int $id): bool
+{
+    $stmt = db()->prepare('SELECT must_change_password FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    return (int) $stmt->fetchColumn() === 1;
+}
+
+/**
+ * Admin-only: change role / active flag / password reset.
+ *
+ * Supplying a password implicitly sets must_change_password, because an admin
+ * who resets someone's password is telling them to choose their own.
+ */
 function user_update_admin(int $id, array $data): void
 {
     $fields = [
@@ -110,14 +141,14 @@ function user_update_admin(int $id, array $data): void
         'phone'     => null_if_empty($data['phone'] ?? null),
         'is_active' => !empty($data['is_active']) ? 1 : 0,
     ];
-    $sql = 'UPDATE users SET name = ?, email = ?, role = ?, phone = ?, is_active = ? WHERE id = ?';
+    $sql = 'UPDATE users SET name = ?, email = ?, role = ?, phone = ?, is_active = ?, must_change_password = ? WHERE id = ?';
     $params = array_values($fields);
+    $params[] = !empty($data['password']) ? 1 : 0;
     $params[] = $id;
 
     if (!empty($data['password'])) {
-        $sql = 'UPDATE users SET name = ?, email = ?, role = ?, phone = ?, is_active = ?, password_hash = ? WHERE id = ?';
-        $params[] = password_hash($data['password'], PASSWORD_DEFAULT);
-        $params[] = $id;
+        $sql = 'UPDATE users SET name = ?, email = ?, role = ?, phone = ?, is_active = ?, must_change_password = 1, password_hash = ? WHERE id = ?';
+        $params = array_merge(array_values($fields), [password_hash($data['password'], PASSWORD_DEFAULT), $id]);
     }
 
     $stmt = db()->prepare($sql);
