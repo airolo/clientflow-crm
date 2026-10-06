@@ -20,69 +20,32 @@ function task_sort_columns(): array
 /** Paginated, searchable, filterable task list. */
 function task_list(array $options = []): array
 {
-    $search     = trim((string) ($options['search'] ?? ''));
-    $status     = (string) ($options['status'] ?? '');
-    $priority   = (string) ($options['priority'] ?? '');
-    $assignedTo = (int) ($options['assigned_to'] ?? 0);
-    $clientId   = (int) ($options['client_id'] ?? 0);
-    $leadId     = (int) ($options['lead_id'] ?? 0);
-    $overdue    = !empty($options['overdue']);
-    $page       = max(1, (int) ($options['page'] ?? 1));
-    $perPage    = (int) ($options['per_page'] ?? ROWS_PER_PAGE);
-    $offset     = ($page - 1) * $perPage;
+    // Overdue is a composite condition, so it is written out rather than
+    // built from enum_filter()/id_filter().
+    $overdue = !empty($options['overdue']);
 
-    $where = [];
-    $params = [];
-
-    if ($search !== '') {
-        $where[] = '(t.title LIKE ? OR t.description LIKE ? OR c.company_name LIKE ? OR l.lead_name LIKE ?)';
-        $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like);
-    }
-    if ($status !== '' && is_valid_option($status, task_statuses())) {
-        $where[] = 't.status = ?';
-        $params[] = $status;
-    }
-    if ($priority !== '' && is_valid_option($priority, task_priorities())) {
-        $where[] = 't.priority = ?';
-        $params[] = $priority;
-    }
-    if ($assignedTo > 0) {
-        $where[] = 't.assigned_to = ?';
-        $params[] = $assignedTo;
-    }
-    if ($clientId > 0) {
-        $where[] = 't.client_id = ?';
-        $params[] = $clientId;
-    }
-    if ($leadId > 0) {
-        $where[] = 't.lead_id = ?';
-        $params[] = $leadId;
-    }
-    if ($overdue) {
-        $where[] = 't.due_date IS NOT NULL AND t.due_date < CURDATE() AND t.status <> "completed"';
-    }
-
-    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-
-    $joins = 'FROM tasks t
-              LEFT JOIN clients c ON c.id = t.client_id
-              LEFT JOIN leads   l ON l.id = t.lead_id
-              LEFT JOIN users   u ON u.id = t.assigned_to';
-
-    $countStmt = db()->prepare('SELECT COUNT(*) ' . $joins . $whereSql);
-    $countStmt->execute($params);
-    $total = (int) $countStmt->fetchColumn();
-
-    $sortSql = order_by(task_sort_columns(), 'due');
-
-    $sql = 'SELECT t.*, c.company_name, l.lead_name, u.name AS owner_name ' . $joins
-        . $whereSql . " ORDER BY $sortSql, t.id DESC LIMIT $perPage OFFSET $offset";
-
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-
-    return ['rows' => $stmt->fetchAll(), 'total' => $total, 'offset' => $offset];
+    return list_query([
+        'select'  => 't.*, c.company_name, l.lead_name, u.name AS owner_name',
+        'from'    => 'FROM tasks t
+                      LEFT JOIN clients c ON c.id = t.client_id
+                      LEFT JOIN leads   l ON l.id = t.lead_id
+                      LEFT JOIN users   u ON u.id = t.assigned_to',
+        'search'  => ['t.title', 't.description', 'c.company_name', 'l.lead_name'],
+        'options' => $options,
+        'filters' => [
+            enum_filter('status', 't.status', task_statuses(), $options),
+            enum_filter('priority', 't.priority', task_priorities(), $options),
+            id_filter('assigned_to', 't.assigned_to', $options),
+            id_filter('client_id', 't.client_id', $options),
+            id_filter('lead_id', 't.lead_id', $options),
+            $overdue
+                ? ['overdue', 't.due_date IS NOT NULL AND t.due_date < CURDATE() AND t.status <> "completed"', []]
+                : null,
+        ],
+        'sort'        => task_sort_columns(),
+        'sort_default' => 'due',
+        'order_by'    => 't.id DESC',
+    ]);
 }
 
 function task_find(int $id): ?array
@@ -155,38 +118,19 @@ function task_delete(int $id): void
     $stmt->execute([$id]);
 }
 
+// Open tasks first, then by due date with undated ones last.
+const TASK_RELATED_ORDER = 'r.status <> "completed", r.due_date IS NULL, r.due_date ASC';
+
 /** Tasks attached to a client (client detail page). */
 function client_tasks(int $clientId, int $limit = 10): array
 {
-    $stmt = db()->prepare(
-        'SELECT t.*, u.name AS owner_name
-         FROM tasks t
-         LEFT JOIN users u ON u.id = t.assigned_to
-         WHERE t.client_id = ?
-         ORDER BY t.status <> "completed", t.due_date IS NULL, t.due_date ASC
-         LIMIT ?'
-    );
-    $stmt->bindValue(1, $clientId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    return related_list('tasks', 'assigned_to', 'client_id', TASK_RELATED_ORDER, $clientId, $limit);
 }
 
 /** Tasks attached to a lead (lead detail page). */
 function lead_tasks(int $leadId, int $limit = 10): array
 {
-    $stmt = db()->prepare(
-        'SELECT t.*, u.name AS owner_name
-         FROM tasks t
-         LEFT JOIN users u ON u.id = t.assigned_to
-         WHERE t.lead_id = ?
-         ORDER BY t.status <> "completed", t.due_date IS NULL, t.due_date ASC
-         LIMIT ?'
-    );
-    $stmt->bindValue(1, $leadId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    return related_list('tasks', 'assigned_to', 'lead_id', TASK_RELATED_ORDER, $leadId, $limit);
 }
 
 /** Dashboard figure: tasks still open for the signed-in user. */

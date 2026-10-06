@@ -24,53 +24,23 @@ function client_sort_columns(): array
  * Paginated, searchable, filterable client list.
  *
  * @param array $options ['search','status','assigned_to','sort','dir','page','per_page']
- * @return array ['rows' => [], 'total' => int]
+ * @return array ['rows' => [], 'total' => int, 'offset' => int]
  */
 function client_list(array $options = []): array
 {
-    $search     = trim((string) ($options['search'] ?? ''));
-    $status     = (string) ($options['status'] ?? '');
-    $assignedTo = (int) ($options['assigned_to'] ?? 0);
-    $page       = max(1, (int) ($options['page'] ?? 1));
-    $perPage    = (int) ($options['per_page'] ?? ROWS_PER_PAGE);
-    $offset     = ($page - 1) * $perPage;
-
-    $where = [];
-    $params = [];
-
-    if ($search !== '') {
-        // Multi-field search using LIKE with wildcards supplied by the user.
-        $where[] = '(c.company_name LIKE ? OR c.contact_person LIKE ? OR c.email LIKE ? OR c.phone LIKE ?)';
-        $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like);
-    }
-    if ($status !== '' && is_valid_option($status, client_statuses())) {
-        $where[] = 'c.status = ?';
-        $params[] = $status;
-    }
-    if ($assignedTo > 0) {
-        $where[] = 'c.assigned_to = ?';
-        $params[] = $assignedTo;
-    }
-
-    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-    $sortSql  = order_by(client_sort_columns(), 'created');
-
-    // Total for pagination.
-    $countStmt = db()->prepare('SELECT COUNT(*) FROM clients c' . $whereSql);
-    $countStmt->execute($params);
-    $total = (int) $countStmt->fetchColumn();
-
-    $sql = "SELECT c.*, u.name AS owner_name
-            FROM clients c
-            LEFT JOIN users u ON u.id = c.assigned_to"
-        . $whereSql
-        . " ORDER BY $sortSql, c.id ASC LIMIT $perPage OFFSET $offset";
-
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-
-    return ['rows' => $stmt->fetchAll(), 'total' => $total, 'offset' => $offset];
+    return list_query([
+        'select'  => 'c.*, u.name AS owner_name',
+        'from'    => 'FROM clients c LEFT JOIN users u ON u.id = c.assigned_to',
+        'search'  => ['c.company_name', 'c.contact_person', 'c.email', 'c.phone'],
+        'options' => $options,
+        'filters' => [
+            enum_filter('status', 'c.status', client_statuses(), $options),
+            id_filter('assigned_to', 'c.assigned_to', $options),
+        ],
+        'sort'        => client_sort_columns(),
+        'sort_default' => 'created',
+        'order_by'    => 'c.id ASC',
+    ]);
 }
 
 /** Single client with its owner name. */

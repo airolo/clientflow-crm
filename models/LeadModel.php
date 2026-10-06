@@ -21,52 +21,20 @@ function lead_sort_columns(): array
 /** Paginated, searchable, filterable lead list. */
 function lead_list(array $options = []): array
 {
-    $search     = trim((string) ($options['search'] ?? ''));
-    $status     = (string) ($options['status'] ?? '');
-    $source     = (string) ($options['source'] ?? '');
-    $assignedTo = (int) ($options['assigned_to'] ?? 0);
-    $page       = max(1, (int) ($options['page'] ?? 1));
-    $perPage    = (int) ($options['per_page'] ?? ROWS_PER_PAGE);
-    $offset     = ($page - 1) * $perPage;
-
-    $where = [];
-    $params = [];
-
-    if ($search !== '') {
-        $where[] = '(l.lead_name LIKE ? OR l.company LIKE ? OR l.email LIKE ? OR l.phone LIKE ?)';
-        $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like);
-    }
-    if ($status !== '' && is_valid_option($status, lead_statuses())) {
-        $where[] = 'l.status = ?';
-        $params[] = $status;
-    }
-    if ($source !== '' && is_valid_option($source, lead_sources())) {
-        $where[] = 'l.lead_source = ?';
-        $params[] = $source;
-    }
-    if ($assignedTo > 0) {
-        $where[] = 'l.assigned_to = ?';
-        $params[] = $assignedTo;
-    }
-
-    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-    $sortSql  = order_by(lead_sort_columns(), 'created');
-
-    $countStmt = db()->prepare('SELECT COUNT(*) FROM leads l' . $whereSql);
-    $countStmt->execute($params);
-    $total = (int) $countStmt->fetchColumn();
-
-    $sql = "SELECT l.*, u.name AS owner_name
-            FROM leads l
-            LEFT JOIN users u ON u.id = l.assigned_to"
-        . $whereSql
-        . " ORDER BY $sortSql, l.id DESC LIMIT $perPage OFFSET $offset";
-
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-
-    return ['rows' => $stmt->fetchAll(), 'total' => $total, 'offset' => $offset];
+    return list_query([
+        'select'  => 'l.*, u.name AS owner_name',
+        'from'    => 'FROM leads l LEFT JOIN users u ON u.id = l.assigned_to',
+        'search'  => ['l.lead_name', 'l.company', 'l.email', 'l.phone'],
+        'options' => $options,
+        'filters' => [
+            enum_filter('status', 'l.status', lead_statuses(), $options),
+            enum_filter('source', 'l.lead_source', lead_sources(), $options),
+            id_filter('assigned_to', 'l.assigned_to', $options),
+        ],
+        'sort'        => lead_sort_columns(),
+        'sort_default' => 'created',
+        'order_by'    => 'l.id DESC',
+    ]);
 }
 
 function lead_find(int $id): ?array

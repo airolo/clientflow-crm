@@ -21,6 +21,33 @@ function user_find(int $id): ?array
     return $stmt->fetch() ?: null;
 }
 
+/**
+ * Paginated, searchable, filterable user list.
+ *
+ * @param array $options ['search','role','sort','dir','page']
+ * @return array ['rows' => [], 'total' => int, 'offset' => int]
+ */
+function user_list(array $options = []): array
+{
+    $role = (string) ($options['role'] ?? '');
+    $validRole = in_array($role, ['admin', 'staff'], true);
+
+    return list_query([
+        'select'  => 'u.id, u.name, u.email, u.role, u.phone, u.is_active, u.created_at',
+        'from'    => 'FROM users u',
+        'search'  => ['u.name', 'u.email'],
+        'options' => $options,
+        'filters' => [
+            $validRole ? ['role', 'u.role = ?', [$role]] : null,
+        ],
+        // Admins first, then alphabetical. Not user-sortable on purpose: the
+        // order is meaningful rather than a column choice.
+        'sort'         => ['role_name' => 'u.role'],
+        'sort_default' => 'role_name',
+        'order_by'     => 'u.role = "admin" DESC, u.name ASC',
+    ]);
+}
+
 /** All users, active first. */
 function user_all(bool $activeOnly = true): array
 {

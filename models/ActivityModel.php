@@ -12,69 +12,36 @@ declare(strict_types=1);
  */
 function activity_list(array $options = []): array
 {
-    $search    = trim((string) ($options['search'] ?? ''));
-    $type      = (string) ($options['type'] ?? '');
-    $clientId  = (int) ($options['client_id'] ?? 0);
-    $leadId    = (int) ($options['lead_id'] ?? 0);
-    $userId    = (int) ($options['user_id'] ?? 0);
-    $dateFrom  = trim((string) ($options['date_from'] ?? ''));
-    $dateTo    = trim((string) ($options['date_to'] ?? ''));
-    $page      = max(1, (int) ($options['page'] ?? 1));
-    $perPage   = (int) ($options['per_page'] ?? ROWS_PER_PAGE);
-    $offset    = ($page - 1) * $perPage;
+    $dateFrom = trim((string) ($options['date_from'] ?? ''));
+    $dateTo   = trim((string) ($options['date_to'] ?? ''));
 
-    $where = [];
-    $params = [];
-
-    if ($search !== '') {
-        $where[] = '(a.title LIKE ? OR a.details LIKE ? OR c.company_name LIKE ? OR l.lead_name LIKE ?)';
-        $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like);
-    }
-    if ($type !== '' && is_valid_option($type, activity_types())) {
-        $where[] = 'a.type = ?';
-        $params[] = $type;
-    }
-    if ($clientId > 0) {
-        $where[] = 'a.client_id = ?';
-        $params[] = $clientId;
-    }
-    if ($leadId > 0) {
-        $where[] = 'a.lead_id = ?';
-        $params[] = $leadId;
-    }
-    if ($userId > 0) {
-        $where[] = 'a.created_by = ?';
-        $params[] = $userId;
-    }
-    if ($dateFrom !== '') {
-        $where[] = 'a.created_at >= ?';
-        $params[] = $dateFrom . ' 00:00:00';
-    }
-    if ($dateTo !== '') {
-        $where[] = 'a.created_at <= ?';
-        $params[] = $dateTo . ' 23:59:59';
-    }
-
-    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-
-    $joins = 'FROM activities a
-              LEFT JOIN clients c ON c.id = a.client_id
-              LEFT JOIN leads   l ON l.id = a.lead_id
-              LEFT JOIN users   u ON u.id = a.created_by';
-
-    $countStmt = db()->prepare('SELECT COUNT(*) ' . $joins . $whereSql);
-    $countStmt->execute($params);
-    $total = (int) $countStmt->fetchColumn();
-
-    $sql = 'SELECT a.*, c.company_name, l.lead_name, u.name AS owner_name ' . $joins
-        . $whereSql . ' ORDER BY a.created_at DESC, a.id DESC LIMIT '
-        . (int) $perPage . ' OFFSET ' . (int) $offset;
-
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-
-    return ['rows' => $stmt->fetchAll(), 'total' => $total, 'offset' => $offset];
+    return list_query([
+        'select'  => 'a.*, c.company_name, l.lead_name, u.name AS owner_name',
+        'from'    => 'FROM activities a
+                      LEFT JOIN clients c ON c.id = a.client_id
+                      LEFT JOIN leads   l ON l.id = a.lead_id
+                      LEFT JOIN users   u ON u.id = a.created_by',
+        'search'  => ['a.title', 'a.details', 'c.company_name', 'l.lead_name'],
+        'options' => $options,
+        'filters' => [
+            enum_filter('type', 'a.type', activity_types(), $options),
+            id_filter('client_id', 'a.client_id', $options),
+            id_filter('lead_id', 'a.lead_id', $options),
+            id_filter('user_id', 'a.created_by', $options),
+            // Dates are inclusive at both ends of the day.
+            $dateFrom !== ''
+                ? ['from', 'a.created_at >= ?', [$dateFrom . ' 00:00:00']]
+                : null,
+            $dateTo !== ''
+                ? ['to', 'a.created_at <= ?', [$dateTo . ' 23:59:59']]
+                : null,
+        ],
+        'order_by' => 'a.created_at DESC, a.id DESC',
+        // Newest first is the only sensible order for a history feed, so no
+        // sort whitelist is needed.
+        'sort'        => ['recent' => 'a.created_at'],
+        'sort_default' => 'recent',
+    ]);
 }
 
 function activity_find(int $id): ?array
@@ -129,38 +96,19 @@ function activity_delete(int $id): void
     $stmt->execute([$id]);
 }
 
+// A history feed reads newest first.
+const ACTIVITY_RELATED_ORDER = 'r.created_at DESC';
+
 /** History for one client (client detail page). */
 function client_activities(int $clientId, int $limit = 10): array
 {
-    $stmt = db()->prepare(
-        'SELECT a.*, u.name AS owner_name
-         FROM activities a
-         LEFT JOIN users u ON u.id = a.created_by
-         WHERE a.client_id = ?
-         ORDER BY a.created_at DESC
-         LIMIT ?'
-    );
-    $stmt->bindValue(1, $clientId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    return related_list('activities', 'created_by', 'client_id', ACTIVITY_RELATED_ORDER, $clientId, $limit);
 }
 
 /** History for one lead (lead detail page). */
 function lead_activities(int $leadId, int $limit = 10): array
 {
-    $stmt = db()->prepare(
-        'SELECT a.*, u.name AS owner_name
-         FROM activities a
-         LEFT JOIN users u ON u.id = a.created_by
-         WHERE a.lead_id = ?
-         ORDER BY a.created_at DESC
-         LIMIT ?'
-    );
-    $stmt->bindValue(1, $leadId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    return related_list('activities', 'created_by', 'lead_id', ACTIVITY_RELATED_ORDER, $leadId, $limit);
 }
 
 /** Dashboard widget: the most recent interactions across the CRM. */
