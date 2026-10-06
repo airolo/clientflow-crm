@@ -122,6 +122,7 @@ require __DIR__ . '/../views/header.php';
                                        class="btn btn-outline-secondary" title="View" aria-label="View <?= e($client['company_name']) ?>">
                                         <i class="bi bi-eye"></i>
                                     </a>
+                                    <?php if (can_manage($client)): ?>
                                     <a href="<?= url('clients/form.php') ?>?id=<?= (int) $client['id'] ?>"
                                        class="btn btn-outline-primary" title="Edit" aria-label="Edit <?= e($client['company_name']) ?>">
                                         <i class="bi bi-pencil"></i>
@@ -138,6 +139,7 @@ require __DIR__ . '/../views/header.php';
                                         <i class="bi bi-trash"></i>
                                     </button>
                                     <?php render_post_form_close(); ?>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>

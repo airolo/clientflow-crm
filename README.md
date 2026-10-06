@@ -256,7 +256,7 @@ ClientFlow/
 │       └── README.txt            # versions, licences, local modification
 │
 ├── tools/
-│   ├── regression.ps1            # 269-assertion end-to-end suite
+│   ├── regression.ps1            # 279-assertion end-to-end suite
 │   ├── verify_phase1.ps1         # 24 checks for the sign-in hardening
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -436,6 +436,14 @@ saving does not resubmit, and success messages survive the hop through the sessi
 - **Authorization** — every page calls `require_login()`; admin areas call `require_admin()`. Staff
   can only modify records they created or are assigned to, enforced in `can_manage()` and checked
   again in the `*_action.php` handlers, not just hidden in the UI.
+- **Reads are guarded too.** `can_manage()` originally only gated writes, which left every detail
+  page open: a staff member could read any client's email, phone, address and full interaction
+  history by walking `?id=1,2,3…`, even with no ability to edit them. `can_view()` now closes the
+  two detail pages that exist (`clients/view.php`, `leads/view.php`), and is deliberately a
+  separate function from `can_manage()` so a deployment can relax reading without loosening writing.
+  **Lists and reports stay org-wide on purpose** — scoping them would break the team performance
+  report, which is how a small business knows who is behind. Row-action buttons are hidden when the
+  signed-in user cannot use them, so nobody is offered an Edit or Delete that would bounce.
 - **Validation** — server-side only, with type, length, format and enum checks. Length limits
   mirror the `VARCHAR` widths in `database.sql` (see `length_errors()`), because the HTML
   `maxlength` attribute is a convenience rather than a control: a direct POST bypasses it and

@@ -196,3 +196,40 @@ function can_manage(array $record): bool
     return (int) ($record['created_by'] ?? 0) === $userId
         || (int) ($record['assigned_to'] ?? 0) === $userId;
 }
+
+/**
+ * Read guard: may this person open this record's detail page?
+ *
+ * can_manage() only ever gated writes, which left every read open: a staff
+ * member could read any client's email, phone, address and full interaction
+ * history by walking ?id=1,2,3... even though they could not edit it.
+ *
+ * Deliberately a separate function from can_manage() rather than a call to it.
+ * They apply the same rule today, but they answer different questions - "may I
+ * change this" versus "may I see this" - and a deployment that wants staff to
+ * read the whole CRM while only editing their own records should be able to
+ * relax one without touching the other.
+ *
+ * Lists and reports stay org-wide on purpose: scoping those would break team
+ * performance reporting, which is how a small business knows who is behind.
+ */
+function can_view(array $record): bool
+{
+    if (is_admin()) {
+        return true;
+    }
+    $userId = (int) current_user_id();
+    return (int) ($record['created_by'] ?? 0) === $userId
+        || (int) ($record['assigned_to'] ?? 0) === $userId;
+}
+
+/**
+ * Read guard for a record whose owner columns are named differently.
+ *
+ * Activities have no assignee - they belong to whoever logged them - so they
+ * cannot go through can_view() with the record as-is.
+ */
+function can_view_activity(array $activity): bool
+{
+    return can_view(['created_by' => $activity['created_by'] ?? 0, 'assigned_to' => 0]);
+}

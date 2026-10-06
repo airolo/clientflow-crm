@@ -15,6 +15,12 @@ if (!$lead) {
     flash_error('That lead could not be found.', 'leads/index.php');
 }
 
+// See clients/view.php: without this, a staff user could read any lead's
+// contact details by walking ?id=.
+if ($lead && !can_view($lead)) {
+    flash_error('You do not have permission to view that lead.', 'leads/index.php');
+}
+
 $deals      = lead_deals($id);
 $tasks      = lead_tasks($id);
 $activities = lead_activities($id, 15);

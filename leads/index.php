@@ -108,22 +108,24 @@ require __DIR__ . '/../views/header.php';
                             <td><span class="small text-secondary"><?= e(nice_date($lead['created_at'])) ?></span></td>
                             <td class="row-actions">
                                 <div class="btn-group btn-group-sm">
-                                    <a href="<?= url('leads/view.php') ?>?id=<?= (int) $lead['id'] ?>" class="btn btn-outline-secondary"
-                                       title="View" aria-label="View <?= e($lead['lead_name']) ?>"><i class="bi bi-eye"></i></a>
-                                    <a href="<?= url('leads/form.php') ?>?id=<?= (int) $lead['id'] ?>" class="btn btn-outline-primary"
-                                       title="Edit" aria-label="Edit <?= e($lead['lead_name']) ?>"><i class="bi bi-pencil"></i></a>
-                                    <a href="<?= url('pipeline/form.php') ?>?lead_id=<?= (int) $lead['id'] ?>" class="btn btn-outline-success"
-                                       title="Create deal" aria-label="Create a deal from <?= e($lead['lead_name']) ?>"><i class="bi bi-kanban"></i></a>
-                                    <?php render_post_form_open([
-                                        'action_url' => 'leads/action.php',
-                                        'action' => 'delete',
-                                        'id' => (int) $lead['id'],
-                                        'return' => 'leads/index.php',
-                                    ]); ?>
-                                    <button type="submit" class="btn btn-outline-danger"
-                                            data-confirm="Delete lead <?= e($lead['lead_name']) ?>? Its tasks and activity history will also be removed."
-                                            title="Delete" aria-label="Delete <?= e($lead['lead_name']) ?>"><i class="bi bi-trash"></i></button>
-                                    <?php render_post_form_close(); ?>
+                                      <a href="<?= url('leads/view.php') ?>?id=<?= (int) $lead['id'] ?>" class="btn btn-outline-secondary"
+                                         title="View" aria-label="View <?= e($lead['lead_name']) ?>"><i class="bi bi-eye"></i></a>
+                                      <?php if (can_manage($lead)): ?>
+                                      <a href="<?= url('leads/form.php') ?>?id=<?= (int) $lead['id'] ?>" class="btn btn-outline-primary"
+                                         title="Edit" aria-label="Edit <?= e($lead['lead_name']) ?>"><i class="bi bi-pencil"></i></a>
+                                      <a href="<?= url('pipeline/form.php') ?>?lead_id=<?= (int) $lead['id'] ?>" class="btn btn-outline-success"
+                                         title="Create deal" aria-label="Create a deal from <?= e($lead['lead_name']) ?>"><i class="bi bi-kanban"></i></a>
+                                      <?php render_post_form_open([
+                                          'action_url' => 'leads/action.php',
+                                          'action' => 'delete',
+                                          'id' => (int) $lead['id'],
+                                          'return' => 'leads/index.php',
+                                      ]); ?>
+                                      <button type="submit" class="btn btn-outline-danger"
+                                              data-confirm="Delete lead <?= e($lead['lead_name']) ?>? Its deals, tasks and activity history move to the recycle bin and can be restored by an administrator."
+                                              title="Delete" aria-label="Delete <?= e($lead['lead_name']) ?>"><i class="bi bi-trash"></i></button>
+                                      <?php render_post_form_close(); ?>
+                                      <?php endif; ?>
                                 </div>
                             </td>
                         </tr>

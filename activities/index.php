@@ -174,6 +174,7 @@ if ($scopeClient || $scopeLead):
                                         <a href="<?= url('activities/form.php') ?>?id=<?= (int) $activity['id'] ?>" class="btn btn-outline-secondary"
                                            title="Edit" aria-label="Edit <?= e($activity['title']) ?>"><i class="bi bi-pencil"></i></a>
                                     <?php endif; ?>
+                                    <?php if (can_view_activity($activity)): ?>
                                     <?php render_post_form_open([
                                         'action_url' => 'activities/action.php',
                                         'action' => 'delete',
@@ -184,6 +185,7 @@ if ($scopeClient || $scopeLead):
                                             data-confirm="Delete this activity? It moves to the recycle bin, where an administrator can restore it."
                                             title="Delete" aria-label="Delete <?= e($activity['title']) ?>"><i class="bi bi-trash"></i></button>
                                     <?php render_post_form_close(); ?>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>

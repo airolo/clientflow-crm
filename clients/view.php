@@ -15,6 +15,13 @@ if (!$client) {
     flash_error('That client could not be found.', 'clients/index.php');
 }
 
+// can_manage() only ever gated writes, so any signed-in user could read this
+// page - including the contact details and the full interaction history - by
+// walking ?id=. Refused here rather than rendered partially.
+if ($client && !can_view($client)) {
+    flash_error('You do not have permission to view that client.', 'clients/index.php');
+}
+
 $deals      = client_deals($id);
 $tasks      = client_tasks($id);
 $activities = client_activities($id, 15);

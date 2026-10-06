@@ -540,6 +540,50 @@ $t = Get-Token 'admin/users.php' $admin
 Invoke-App 'POST' 'admin/user_action.php' $admin @{ _token = $t; action = 'delete'; id = 1 } | Out-Null
 Assert 'admin cannot delete own account' ((Invoke-Sql 'SELECT COUNT(*) FROM users WHERE id=1;') -eq '1')
 
+# ------------------------------------------------------------ read security
+
+Section 'Read-level access'
+
+# Seeded ownership: Sarah is user 2. Client 1 and lead 1 are hers;
+# client 2 and lead 2 belong to Marcus (user 3).
+Assert 'staff can view a client assigned to them' ((Invoke-App 'GET' 'client_view.php?id=1' $staff).Code -eq 200)
+Assert 'staff can view a lead assigned to them' ((Invoke-App 'GET' 'lead_view.php?id=1' $staff).Code -eq 200)
+
+# can_manage() only ever gated writes, so these used to render in full.
+$r = Invoke-App 'GET' 'client_view.php?id=2' $staff
+Assert 'staff blocked from another user\'s client detail' ($r.Location -match 'clients/index\.php$') "location=$($r.Location)"
+Assert 'blocked client detail leaks no contact details' (-not ($r.Body -match 'Bluepeak|hannah@'))
+Assert 'blocked client detail leaks no notes' (-not ($r.Body -match 'Analytics add-on'))
+
+$r = Invoke-App 'GET' 'lead_view.php?id=2' $staff
+Assert 'staff blocked from another user\'s lead detail' ($r.Location -match 'leads/index\.php$') "location=$($r.Location)"
+Assert 'blocked lead detail leaks no contact details' (-not ($r.Body -match 'Aisha Rahman|aisha@'))
+
+# Admins are unaffected.
+Assert 'admin can view any client' ((Invoke-App 'GET' 'client_view.php?id=2' $admin).Code -eq 200)
+Assert 'admin can view any lead' ((Invoke-App 'GET' 'lead_view.php?id=2' $admin).Code -eq 200)
+
+# A record the staff user created is theirs even if assigned elsewhere.
+$t = Get-Token 'clients/form.php' $staff
+Invoke-App 'POST' 'clients/form.php' $staff @{
+    _token = $t; company_name = 'Regression StaffOwned'; contact_person = 'Mine'; status = 'prospect'
+} | Out-Null
+$mine = [int](Invoke-Sql "SELECT id FROM clients WHERE company_name='Regression StaffOwned' LIMIT 1;")
+Assert 'a staff user can view a record they created' ($mine -gt 0 -and (Invoke-App 'GET' "client_view.php?id=$mine" $staff).Code -eq 200)
+
+# Lists and reports stay org-wide on purpose - scoping them would break team
+# performance reporting.
+Assert 'client list stays org-wide for staff' ((Invoke-App 'GET' 'clients.php?search=Bluepeak' $staff).Body -match 'Bluepeak')
+Assert 'reports stay org-wide for staff' ((Invoke-App 'GET' 'reports/index.php' $staff).Body -match 'Team performance')
+
+# The UI must not offer an action the server will refuse.
+$listHtml = (Invoke-App 'GET' 'clients.php?search=Bluepeak' $staff).Body
+Assert 'staff are not offered Edit on a record they cannot manage' ($listHtml -notmatch 'clients/form\.php\?id=2')
+Assert 'staff are not offered Delete on a record they cannot manage' (
+    (-not ($listHtml -match 'action=.delete.')) -or (-not ($listHtml -match 'id=2')))
+
+Invoke-Sql "DELETE FROM clients WHERE company_name='Regression StaffOwned';" | Out-Null
+
 # ------------------------------------------------------------ soft delete
 
 Section 'Soft delete and the recycle bin'

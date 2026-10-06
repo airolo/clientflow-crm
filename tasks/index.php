@@ -173,21 +173,23 @@ require __DIR__ . '/../views/header.php';
                             <td><?= task_status_badge($task['status']) ?></td>
                             <td><span class="small"><?= e($task['owner_name'] ?: 'Unassigned') ?></span></td>
                             <td class="row-actions">
-                                <div class="btn-group btn-group-sm">
-                                    <a href="<?= url('tasks/form.php') ?>?id=<?= (int) $task['id'] ?>" class="btn btn-outline-secondary"
-                                       title="Edit" aria-label="Edit <?= e($task['title']) ?>"><i class="bi bi-pencil"></i></a>
-                                    <?php render_post_form_open([
-                                        'action_url' => 'tasks/action.php',
-                                        'action' => 'delete',
-                                        'id' => (int) $task['id'],
-                                        'return' => 'tasks/index.php',
-                                    ]); ?>
-                                    <button type="submit" class="btn btn-outline-danger"
-                                            data-confirm="Delete task &quot;<?= e($task['title']) ?>&quot;?"
-                                            title="Delete" aria-label="Delete <?= e($task['title']) ?>"><i class="bi bi-trash"></i></button>
-                                    <?php render_post_form_close(); ?>
-                                </div>
-                            </td>
+                                  <div class="btn-group btn-group-sm">
+                                      <?php if (can_manage($task)): ?>
+                                      <a href="<?= url('tasks/form.php') ?>?id=<?= (int) $task['id'] ?>" class="btn btn-outline-secondary"
+                                         title="Edit" aria-label="Edit <?= e($task['title']) ?>"><i class="bi bi-pencil"></i></a>
+                                      <?php render_post_form_open([
+                                          'action_url' => 'tasks/action.php',
+                                          'action' => 'delete',
+                                          'id' => (int) $task['id'],
+                                          'return' => 'tasks/index.php',
+                                      ]); ?>
+                                      <button type="submit" class="btn btn-outline-danger"
+                                              data-confirm="Delete task &quot;<?= e($task['title']) ?>&quot;? It moves to the recycle bin, where an administrator can restore it."
+                                              title="Delete" aria-label="Delete <?= e($task['title']) ?>"><i class="bi bi-trash"></i></button>
+                                      <?php render_post_form_close(); ?>
+                                      <?php endif; ?>
+                                  </div>
+                              </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
