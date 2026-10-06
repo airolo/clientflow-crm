@@ -88,7 +88,8 @@ C:\xampp\htdocs\ClientFlow\database.sql
 ```
 
 On macOS it is `/Applications/XAMPP/htdocs/ClientFlow/`, on Linux `/opt/lampp/htdocs/ClientFlow/`.
-The folder name can be anything — the app uses relative paths throughout.
+The folder name can be anything — `APP_URL` works out where the project is served from by
+comparing its own location against the document root, so nothing needs reconfiguring.
 
 ### 3. Create the database
 
@@ -106,7 +107,7 @@ The script creates the `clientflow_crm` database, all six tables and the demo da
 
 ### 4. Check the connection settings
 
-Open `ClientFlow/config/config.php`. The defaults match a stock XAMPP install:
+Open `ClientFlow/app/config/config.php`. The defaults match a stock XAMPP install:
 
 ```php
 define('DB_HOST', '127.0.0.1');
@@ -159,72 +160,123 @@ deliberately overdue) and 30 timestamped activities.
 
 ```
 ClientFlow/
-├── config/
-│   ├── config.php            # constants: DB credentials, app name, timezone
-│   └── database.php          # PDO connection singleton
 │
-├── includes/
-│   ├── bootstrap.php         # single entry point, required by every page
-│   ├── functions.php         # escaping, flashes, CSRF, badges, pagination
-│   ├── list_page.php         # shared filter bars, table headers, row actions
-│   ├── auth.php              # session hardening + require_login/require_admin/can_manage
-│   ├── header.php            # <head>, page title, breadcrumbs, opens <main>
-│   ├── navbar.php            # top bar with user dropdown
-│   ├── sidebar.php           # navigation links (shared: desktop + mobile)
-│   ├── alerts.php            # flash message rendering
-│   └── footer.php            # closes <main>, footer, confirm modal, scripts
+├── index.php                     # dashboard — the only page at the root
 │
-├── models/                   # every SQL statement lives here
-│   ├── ListQuery.php         # shared list-query builder and filter helpers
-│   ├── UserModel.php
-│   ├── ClientModel.php
-│   ├── LeadModel.php
-│   ├── DealModel.php
-│   ├── TaskModel.php
-│   ├── ActivityModel.php
-│   └── ReportModel.php
+├── auth/                         # sign in, sign out, my profile
+│   ├── login.php
+│   ├── logout.php
+│   ├── profile.php
+│   └── README.md
 │
-├── tools/
-│   └── regression.ps1        # end-to-end suite, drives the running site
+├── clients/                      # customer accounts
+│   ├── index.php                 #   list, search, filter, sort, paginate
+│   ├── view.php                  #   one client: deals, tasks, history
+│   ├── form.php                  #   create + edit
+│   ├── action.php                #   POST: delete
+│   └── README.md
+│
+├── leads/                        # early-stage prospects
+│   ├── index.php
+│   ├── view.php
+│   ├── form.php
+│   ├── action.php
+│   └── README.md
+│
+├── pipeline/                     # the Kanban board
+│   ├── index.php                 #   board, grouped by stage
+│   ├── form.php                  #   create + edit a deal
+│   ├── action.php                #   POST: move stage, delete
+│   └── README.md
+│
+├── tasks/                        # follow-ups
+│   ├── index.php
+│   ├── form.php
+│   ├── action.php
+│   └── README.md
+│
+├── activities/                   # interaction history
+│   ├── index.php
+│   ├── form.php
+│   ├── action.php
+│   └── README.md
+│
+├── reports/                      # read-only analytics
+│   ├── index.php
+│   └── README.md
+│
+├── admin/                        # admin only (require_admin)
+│   ├── users.php
+│   ├── user_form.php
+│   ├── user_action.php
+│   └── README.md
+│
+├── app/                          # never served over HTTP
+│   ├── bootstrap.php             #   the single entry point
+│   ├── auth.php                  #   sessions, login, guards
+│   ├── functions.php             #   escaping, CSRF, badges, pagination
+│   ├── list_page.php             #   shared list-page markup
+│   ├── config/
+│   │   ├── config.php            #     constants, APP_URL
+│   │   └── database.php          #     PDO singleton
+│   ├── models/                   #     every SQL statement
+│   │   ├── ListQuery.php         #       shared list-query builder
+│   │   ├── ClientModel.php
+│   │   ├── LeadModel.php
+│   │   ├── DealModel.php
+│   │   ├── TaskModel.php
+│   │   ├── ActivityModel.php
+│   │   ├── UserModel.php
+│   │   └── ReportModel.php
+│   └── README.md                 # reading order for a newcomer
+│
+├── views/                        # presentation shell, never served
+│   ├── header.php  footer.php
+│   ├── navbar.php  sidebar.php  alerts.php
+│   └── README.md
 │
 ├── assets/
-│   ├── css/style.css         # custom styles layered on Bootstrap
-│   ├── js/app.js             # confirm dialogs, counters, auto-dismiss
-│   └── vendor/               # Bootstrap 5 + Icons, vendored so the app works offline
-│       ├── css/bootstrap.min.css
-│       ├── css/bootstrap-icons.min.css
-│       ├── js/bootstrap.bundle.min.js
-│       ├── fonts/bootstrap-icons.woff2
-│       ├── fonts/bootstrap-icons.woff
-│       └── README.txt        # versions, licences, local modification
+│   ├── css/style.css
+│   ├── js/app.js
+│   └── vendor/                   # Bootstrap 5 + Icons, vendored for offline use
+│       ├── css/  js/  fonts/
+│       └── README.txt            # versions, licences, local modification
 │
-├── index.php                 # dashboard
-├── login.php  logout.php  profile.php
-├── clients.php  client_form.php  client_view.php  client_action.php
-├── leads.php    lead_form.php    lead_view.php    lead_action.php
-├── pipeline.php deal_form.php    deal_action.php
-├── tasks.php    task_form.php    task_action.php
-├── activities.php  activity_form.php  activity_action.php
-├── reports.php
-├── users.php    user_form.php    user_action.php
+├── tools/
+│   └── regression.ps1            # 219-assertion end-to-end suite
 │
-├── .htaccess                 # blocks database.sql, README, VCS dirs, listings
-├── database.sql              # schema + demo data
+├── .htaccess                     # access rules and legacy URL redirects
+├── .gitignore  .gitattributes
+├── database.sql                  # schema + demo data
 └── README.md
 ```
 
-Three conventions keep this readable:
+Each feature folder has its own `README.md` explaining what the files in it are
+for and which model backs it. `app/README.md` gives a reading order, and
+`views/README.md` documents the page variables a page sets before including the
+header.
 
-- **Pages hold presentation and request handling only.** Any SQL is in `models/`.
-- **`*_form.php` handles both create and edit**, and **`*_action.php` handles POST-only actions**
-  such as delete or status change, so list pages contain no logic beyond display.
-- **Repeated markup goes through `includes/list_page.php`.** `render_filter_bar()`,
-  `render_th()`, `render_post_form_open()` and `render_table_footer()` replaced five copies of
-  the same filter bar and table scaffolding, which is also why every column header now carries
-  `scope="col"` and every icon-only control an `aria-label`.
+### The four rules
 
-Likewise `models/ListQuery.php` replaces the four near-identical `*_list()` functions: each model
-now declares only its own search columns, filters, joins and sortable columns.
+- **Pages hold presentation and request handling only.** Any SQL is in `app/models/`.
+- **Every page follows the same four steps**: require `app/bootstrap.php`, call
+  `require_login()` (or `require_admin()`), set the page variables, include
+  `views/header.php` and `views/footer.php`.
+- **`form.php` handles both create and edit** — an `id` decides which — and
+  **`action.php` handles POST-only actions**, so list pages contain no logic beyond
+  display.
+- **Every internal link goes through `url()`**, never a bare relative path. That is
+  what allowed the pages to move into folders without touching a single href.
+
+### Inside a feature folder
+
+| File | Role |
+|---|---|
+| `index.php` | The list or main screen |
+| `view.php` | One record in detail |
+| `form.php` | Create and edit, shared |
+| `action.php` | POST-only handlers (delete, status changes) |
+
 
 ---
 
@@ -272,9 +324,8 @@ Design notes:
 Every page follows the same three-step shape:
 
 ```php
-<?php
-require_once __DIR__ . '/includes/bootstrap.php';   // config, db, helpers, session
-require_login();                                    // auth guard
+require_once __DIR__ . '/../app/bootstrap.php';  // config, db, helpers, auth, models
+require_login();                                 // auth guard
 
 $errors = take_errors();   // pull validation errors from the last redirect
 $old    = take_old();      // pull the submitted values back for redisplay
@@ -285,49 +336,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         client_create($data);                     // write via the model
         flash_success('Saved.');                  // queue a message
-        redirect('clients.php');                  // PRG: post/redirect/get
+        redirect('clients/index.php');             // PRG: post/redirect/get
     }
-    redirect_with_errors('client_form.php', $errors, $_POST);  // bounce back
+    redirect_with_errors('clients/form.php', $errors, $_POST);  // bounce back
 }
 
 $rows = client_list([...]);   // read via the model
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../views/header.php';
 // ... HTML ...
-require __DIR__ . '/includes/footer.php';
+require __DIR__ . '/../views/footer.php';
 ```
+
+Note the `__DIR__ . '/../'` on the requires: a page inside a feature folder is one level down, so
+it reaches back up to `app/` and `views/`. `redirect()` and `url()` take paths relative to the
+project root, which is why the strings above have no `../` in them.
 
 **Post/Redirect/Get** means a form submission always ends in a redirect. Refreshing the page after
 saving does not resubmit, and success messages survive the hop through the session.
 
 ### Adding a page
 
-1. Add any queries as functions in the relevant `models/*Model.php`.
-2. Create the page in the project root.
+1. Add any queries as functions in the relevant `app/models/*Model.php`.
+2. Create the page in the right feature folder — or a new folder if it starts a new module.
 3. `require` bootstrap, call `require_login()` (or `require_admin()`), set `$pageTitle`,
    `$pageHeading`, `$activeNav` and `$breadcrumbs`, then include `header.php` and `footer.php`.
+4. Put a link to it in `views/sidebar.php`.
 
 ### Adding a field
 
 1. Add the column in `database.sql`.
 2. Add it to the `SELECT`/`INSERT`/`UPDATE` in the model.
-3. Add an `<input>` to the `*_form.php`, using `old_value($old, $record, 'your_field')` so it
+3. Add an `<input>` to the `form.php`, using `old_value($old, $record, 'your_field')` so it
    repopulates after a validation failure.
-4. If it is an enum, add the option to the relevant list function in `functions.php` and to
-   `*_validate()`.
+4. Add the matching length limit to the `length_errors()` call in `*_validate()`.
+5. If it is an enum, add the option to the relevant list function in `app/functions.php`.
 
 ### Useful helpers
 
 | Helper | Purpose |
 |---|---|
 | `e($value)` | Escape for HTML output — use on every dynamic value |
+| `url($path)` | Build a URL from a project-root-relative path |
 | `csrf_field()` / `verify_csrf()` | CSRF token hidden input and check |
 | `flash()` / `flash_success()` / `flash_error()` | One-request messages |
 | `take_errors()` / `take_old()` / `old_value()` | Validation round-trip |
-| `sort_link()` / `order_by()` | Sortable headers with a whitelisted `ORDER BY` |
-| `render_pagination()` / `result_summary()` | Pagination UI |
-| `render_filter_bar()` / `render_th()` | Shared list-page markup |
+| `sort_href()` / `render_th()` | Sortable headers with a whitelisted `ORDER BY` |
+| `render_filter_bar()` / `render_table_footer()` | Shared list-page markup |
+| `render_list_empty_state()` | Empty state that reflects active filters |
+| `render_page_actions()` | Header buttons, escaped for you |
 | `length_errors()` | Column-width validation |
-| `empty_state()` / `render_list_empty_state()` | Consistent empty-state block |
 | `money()` / `money_short()` / `nice_date()` / `time_ago()` | Formatting |
 | `client_status_badge()` etc. | Coloured status pills |
 | `require_login()` / `require_admin()` / `can_manage($row)` | Authorization |
@@ -366,14 +423,26 @@ saving does not resubmit, and success messages survive the hop through the sessi
 - **Redirects** — post-action `return` values are whitelisted against known internal pages, closing
   off open-redirect abuse.
 - **Web exposure** — `.htaccess` disables directory listings and denies `database.sql` (which
-  contains password hashes), `README.md` (which contains demo credentials), the `config/`,
-  `models/` and `includes/` directories, and any `.git`/`.svn`/`.hg` directory. Those files stay in
-  the web root for setup convenience and are simply never served.
+  contains password hashes), `README.md` (which contains demo credentials), the `app/` and
+  `views/` directories, and any `.git`/`.svn`/`.hg` directory. The internals are never served;
+  `database.sql` and `README.md` stay in the web root only because the setup instructions need
+  them there.
 - **Output** — the database layer catches connection errors, logs the detail server-side and shows
   the user a plain-language troubleshooting page.
 
 Not included, because this is a local portfolio project: email sending, file uploads, rate
-limiting, remember-me tokens, CSRF-per-request tokens, and an audit log of who changed what.
+limiting, remember-me tokens, CSRF-per-request tokens, and an audit log of who changed what. The
+last one is the most valuable gap: without it, an admin cannot investigate what a staff member
+changed or destroyed, and deletions leave no trace.
+
+---
+
+## Backwards compatibility
+
+The pages used to sit loose in the project root (`clients.php`, `login.php`, and so on). The root
+`.htaccess` still maps those old URLs onto their new locations, so existing bookmarks and links
+keep working. The block is commented and labelled — remove it once nothing points at the old
+paths.
 
 ---
 
@@ -381,29 +450,30 @@ limiting, remember-me tokens, CSRF-per-request tokens, and an audit log of who c
 
 | Want to change | Where |
 |---|---|
-| Database credentials | `config/config.php` |
-| Timezone | `config/config.php` (`APP_TIMEZONE`) |
-| Rows per page | `config/config.php` (`ROWS_PER_PAGE`) |
+| Database credentials | `app/config/config.php` |
+| Timezone | `app/config/config.php` (`APP_TIMEZONE`) |
+| Rows per page | `app/config/config.php` (`ROWS_PER_PAGE`) |
+| Product name | `app/config/config.php` (`APP_NAME`, `APP_SHORT`) |
 | Brand colours | `assets/css/style.css` (`:root` variables at the top) |
-| Sidebar links | `includes/sidebar.php` (`$navItems`) |
+| Sidebar links | `views/sidebar.php` (`$navItems`) |
 | Page-header buttons | `$pageActions` in each page — a structured array, rendered by `render_page_actions()` |
 | Column max lengths | `database.sql` **and** the `length_errors()` call in the matching `*_validate()` |
-| Client statuses | `functions.php` (`client_statuses()`) |
-| Pipeline stages | `functions.php` (`deal_stages()`) |
-| Forecast probabilities | `models/ReportModel.php` (`report_win_rate()`) |
-| List filters | the `filters` array in the model's `*_list()` call |
-| Table columns | `select` in the model's `list_query()` config + the `<thead>` in the page |
+| Client statuses | `app/functions.php` (`client_statuses()`) |
+| Pipeline stages | `app/functions.php` (`deal_stages()`) |
+| Forecast probabilities | `app/models/ReportModel.php` (`report_win_rate()`) |
+| List filters, search columns, sortable columns | the `list_query()` call at the top of each `*_list()` |
+| Table columns | `select` in that `list_query()` config, plus the `<thead>` in the page |
 | Dashboard tiles | the `$tiles` array near the top of `index.php` |
-| Product name | `config/config.php` (`APP_NAME`, `APP_SHORT`) |
+| Confirmation dialogs | `assets/js/app.js` (`data-confirm` on any button or link) |
 
 ---
 
 ## Troubleshooting
 
 **"Database connection failed"**
-MySQL is not running, the database was never imported, or the credentials in `config/config.php` are
-wrong. Start MySQL in the XAMPP Control Panel, re-import `database.sql` via phpMyAdmin, then check
-the four `DB_*` constants.
+MySQL is not running, the database was never imported, or the credentials in `app/config/config.php`
+are wrong. Start MySQL in the XAMPP Control Panel, re-import `database.sql` via phpMyAdmin, then
+check the four `DB_*` constants.
 
 **Blank page or "database not selected"**
 The import did not complete. Re-run `database.sql` through phpMyAdmin and confirm `clientflow_crm`

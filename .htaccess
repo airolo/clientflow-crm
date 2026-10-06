@@ -54,7 +54,7 @@ Options -Indexes
 # without mod_rewrite.
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(?:config|models|includes)(?:/|$) - [F,L]
+    RewriteRule ^(?:app|views)(?:/|$) - [F,L]
 
     # Version-control internals must never be served, even if the project
     # folder is inside the document root and a repo was initialised there.
@@ -66,6 +66,46 @@ Options -Indexes
 RedirectMatch 404 /\.git
 RedirectMatch 404 /\.svn
 RedirectMatch 404 /\.hg
+
+# ---------------------------------------------------------------------
+# Backwards compatibility
+# ---------------------------------------------------------------------
+# The pages used to sit loose in the project root. These redirects keep
+# older bookmarks and any external links working after the move into
+# feature folders. Remove this block once nothing points at the old paths.
+<IfModule mod_rewrite.c>
+    RewriteRule ^login\.php$            auth/login.php       [END]
+    RewriteRule ^logout\.php$           auth/logout.php      [END]
+    RewriteRule ^profile\.php$          auth/profile.php     [END]
+
+    RewriteRule ^clients\.php$          clients/index.php    [END]
+    RewriteRule ^client_form\.php(.*)$  clients/form.php$1   [END]
+    RewriteRule ^client_view\.php(.*)$  clients/view.php$1   [END]
+    RewriteRule ^client_action\.php(.*)$ clients/action.php$1 [END]
+
+    RewriteRule ^leads\.php$            leads/index.php      [END]
+    RewriteRule ^lead_form\.php(.*)$    leads/form.php$1     [END]
+    RewriteRule ^lead_view\.php(.*)$    leads/view.php$1     [END]
+    RewriteRule ^lead_action\.php(.*)$  leads/action.php$1   [END]
+
+    RewriteRule ^pipeline\.php$         pipeline/index.php   [END]
+    RewriteRule ^deal_form\.php(.*)$    pipeline/form.php$1  [END]
+    RewriteRule ^deal_action\.php(.*)$  pipeline/action.php$1 [END]
+
+    RewriteRule ^tasks\.php$            tasks/index.php      [END]
+    RewriteRule ^task_form\.php(.*)$    tasks/form.php$1     [END]
+    RewriteRule ^task_action\.php(.*)$  tasks/action.php$1   [END]
+
+    RewriteRule ^activities\.php$       activities/index.php [END]
+    RewriteRule ^activity_form\.php(.*)$    activities/form.php$1    [END]
+    RewriteRule ^activity_action\.php(.*)$  activities/action.php$1  [END]
+
+    RewriteRule ^reports\.php$          reports/index.php    [END]
+
+    RewriteRule ^users\.php$            admin/users.php      [END]
+    RewriteRule ^user_form\.php(.*)$    admin/user_form.php$1 [END]
+    RewriteRule ^user_action\.php(.*)$  admin/user_action.php$1 [END]
+</IfModule>
 
 # Sensible hardening for the pages that do get served.
 <IfModule mod_headers.c>

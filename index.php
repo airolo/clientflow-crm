@@ -5,7 +5,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/includes/bootstrap.php';
+require_once __DIR__ . '/app/bootstrap.php';
 require_login();
 
 $summary  = report_summary();
@@ -24,7 +24,7 @@ $pageSubtitle = 'Here is what is happening across your accounts today.';
 $activeNav    = 'dashboard';
 $breadcrumbs  = ['Dashboard' => null];
 
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/views/header.php';
 ?>
 
 <!-- ---------- Stat tiles ---------- -->
@@ -32,17 +32,17 @@ require __DIR__ . '/includes/header.php';
     <?php
     $tiles = [
         ['label' => 'Total clients', 'value' => $summary['total_clients'], 'hint' => 'All accounts on file',
-         'icon' => 'bi-people-fill', 'tint' => 'primary', 'link' => 'clients.php'],
+         'icon' => 'bi-people-fill', 'tint' => 'primary', 'link' => 'clients/index.php'],
         ['label' => 'Active leads', 'value' => $summary['active_leads'], 'hint' => $summary['new_leads_30d'] . ' new in 30 days',
-         'icon' => 'bi-funnel-fill', 'tint' => 'info', 'link' => 'leads.php'],
+         'icon' => 'bi-funnel-fill', 'tint' => 'info', 'link' => 'leads/index.php'],
         ['label' => 'Open deals', 'value' => $summary['open_deals'], 'hint' => money_short($summary['open_deal_value']) . ' in play',
-         'icon' => 'bi-kanban-fill', 'tint' => 'warning', 'link' => 'pipeline.php'],
+         'icon' => 'bi-kanban-fill', 'tint' => 'warning', 'link' => 'pipeline/index.php'],
         ['label' => 'Won deals', 'value' => $summary['won_deals'], 'hint' => money_short($summary['won_value']) . ' revenue',
          'icon' => 'bi-trophy-fill', 'tint' => 'success', 'link' => 'pipeline.php?stage=won'],
         ['label' => 'Pending tasks', 'value' => $summary['pending_tasks'],
-         'hint' => $summary['overdue_tasks'] . ' overdue', 'icon' => 'bi-check2-square', 'tint' => 'danger', 'link' => 'tasks.php'],
+         'hint' => $summary['overdue_tasks'] . ' overdue', 'icon' => 'bi-check2-square', 'tint' => 'danger', 'link' => 'tasks/index.php'],
         ['label' => 'Interactions logged', 'value' => $summary['activities'], 'hint' => 'Calls, emails, meetings, notes',
-         'icon' => 'bi-clock-history', 'tint' => 'secondary', 'link' => 'activities.php'],
+         'icon' => 'bi-clock-history', 'tint' => 'secondary', 'link' => 'activities/index.php'],
     ];
     foreach ($tiles as $tile):
     ?>
@@ -67,7 +67,7 @@ require __DIR__ . '/includes/header.php';
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-kanban me-2 text-primary"></i>Pipeline value by stage</span>
-                <a href="pipeline.php" class="btn btn-sm btn-outline-primary">Open pipeline</a>
+                <a href="<?= url('pipeline/index.php') ?>" class="btn btn-sm btn-outline-primary">Open pipeline</a>
             </div>
             <div class="card-body">
                 <div class="row g-2">
@@ -125,7 +125,7 @@ require __DIR__ . '/includes/header.php';
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-funnel me-2 text-primary"></i>Leads by status</span>
-                <a href="leads.php" class="btn btn-sm btn-outline-primary">View all leads</a>
+                <a href="<?= url('leads/index.php') ?>" class="btn btn-sm btn-outline-primary">View all leads</a>
             </div>
             <div class="card-body">
                 <div class="row g-2">
@@ -154,10 +154,10 @@ require __DIR__ . '/includes/header.php';
         <div class="card mb-3">
             <div class="card-header"><i class="bi bi-lightning-charge me-2 text-primary"></i>Quick actions</div>
             <div class="card-body d-grid gap-2">
-                <a href="client_form.php" class="btn btn-primary"><i class="bi bi-person-plus me-2"></i>Add client</a>
-                <a href="lead_form.php" class="btn btn-outline-primary"><i class="bi bi-funnel me-2"></i>Add lead</a>
-                <a href="task_form.php" class="btn btn-outline-secondary"><i class="bi bi-check2-square me-2"></i>Add task</a>
-                <a href="activity_form.php" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-2"></i>Log activity</a>
+                <a href="<?= url('clients/form.php') ?>" class="btn btn-primary"><i class="bi bi-person-plus me-2"></i>Add client</a>
+                <a href="<?= url('leads/form.php') ?>" class="btn btn-outline-primary"><i class="bi bi-funnel me-2"></i>Add lead</a>
+                <a href="<?= url('tasks/form.php') ?>" class="btn btn-outline-secondary"><i class="bi bi-check2-square me-2"></i>Add task</a>
+                <a href="<?= url('activities/form.php') ?>" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-2"></i>Log activity</a>
             </div>
         </div>
 
@@ -165,17 +165,17 @@ require __DIR__ . '/includes/header.php';
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-alarm me-2 text-danger"></i>Due today or overdue</span>
-                <a href="tasks.php?status=pending" class="btn btn-sm btn-outline-secondary">All</a>
+                <a href="<?= url('tasks/index.php') ?>?status=pending" class="btn btn-sm btn-outline-secondary">All</a>
             </div>
             <?php if (!$dueSoon): ?>
-                <?= empty_state('bi-check2-circle', 'Nothing outstanding', 'No open tasks are due today. Nice work.', 'task_form.php', 'Add a task') ?>
+                <?= empty_state('bi-check2-circle', 'Nothing outstanding', 'No open tasks are due today. Nice work.', 'tasks/form.php', 'Add a task') ?>
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php foreach ($dueSoon as $task):
                         $isLate = $task['due_date'] < date('Y-m-d');
                     ?>
                         <li class="list-group-item d-flex gap-2 align-items-start py-3">
-                            <form method="post" action="task_action.php" class="m-0">
+                            <form method="post" action="<?= url('tasks/action.php') ?>" class="m-0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="complete">
                                 <input type="hidden" name="id" value="<?= (int) $task['id'] ?>">
@@ -210,10 +210,10 @@ require __DIR__ . '/includes/header.php';
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Largest open deals</span>
-                <a href="pipeline.php" class="btn btn-sm btn-outline-primary">Pipeline</a>
+                <a href="<?= url('pipeline/index.php') ?>" class="btn btn-sm btn-outline-primary">Pipeline</a>
             </div>
             <?php if (!$topDeals): ?>
-                <?= empty_state('bi-kanban', 'No open deals', 'Deals you add to the pipeline will appear here.', 'deal_form.php', 'Add a deal') ?>
+                <?= empty_state('bi-kanban', 'No open deals', 'Deals you add to the pipeline will appear here.', 'pipeline/form.php', 'Add a deal') ?>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -250,11 +250,11 @@ require __DIR__ . '/includes/header.php';
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-clock-history me-2 text-primary"></i>Recent activity</span>
-                <a href="activities.php" class="btn btn-sm btn-outline-primary">All activity</a>
+                <a href="<?= url('activities/index.php') ?>" class="btn btn-sm btn-outline-primary">All activity</a>
             </div>
             <div class="card-body">
                 <?php if (!$recent): ?>
-                    <?= empty_state('bi-clock-history', 'No activity yet', 'Log a call, email or meeting to build the history.', 'activity_form.php', 'Log activity') ?>
+                    <?= empty_state('bi-clock-history', 'No activity yet', 'Log a call, email or meeting to build the history.', 'activities/form.php', 'Log activity') ?>
                 <?php else: ?>
                     <div class="timeline">
                         <?php foreach ($recent as $activity):
@@ -291,7 +291,7 @@ require __DIR__ . '/includes/header.php';
     <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span><i class="bi bi-stars me-2 text-primary"></i>Hot leads not on the pipeline yet</span>
-            <a href="leads.php" class="btn btn-sm btn-outline-primary">View all leads</a>
+            <a href="<?= url('leads/index.php') ?>" class="btn btn-sm btn-outline-primary">View all leads</a>
         </div>
         <div class="card-body">
             <div class="row g-3">
@@ -308,7 +308,7 @@ require __DIR__ . '/includes/header.php';
                             </div>
                             <div class="text-end">
                                 <div class="small fw-semibold mono"><?= e(money_short($lead['estimated_value'])) ?></div>
-                                <a href="deal_form.php?lead_id=<?= (int) $lead['id'] ?>"
+                                <a href="<?= url('pipeline/form.php') ?>?lead_id=<?= (int) $lead['id'] ?>"
                                    class="btn btn-sm btn-outline-primary mt-1" title="Create a deal">
                                     <i class="bi bi-plus-lg"></i>
                                 </a>
@@ -321,4 +321,4 @@ require __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/views/footer.php'; ?>

@@ -31,7 +31,13 @@ $script:Failures = @()
 # ---------------------------------------------------------------- helpers
 
 function Invoke-App([string]$Method, [string]$Path, $Session, [hashtable]$Fields = $null) {
-    $req = [System.Net.HttpWebRequest]::Create("$BaseUrl/$Path")
+    # Accepts a project-relative path ('clients/index.php') or a Location header
+    # straight from a redirect, which the app emits as an absolute path
+    # prefixed with APP_URL ('/ClientFlow/clients/index.php').
+    $uri = if ($Path -match '^https?://') { $Path }
+           elseif ($Path.StartsWith('/')) { "http://localhost$Path" }
+           else { "$BaseUrl/$Path" }
+    $req = [System.Net.HttpWebRequest]::Create($uri)
     $req.Method = $Method
     $req.AllowAutoRedirect = $false
     $req.Timeout = 25000
@@ -118,7 +124,7 @@ Write-Output "ClientFlow CRM regression suite"
 Write-Output "Target: $BaseUrl"
 
 try {
-    $probe = Invoke-App 'GET' 'login.php' $null
+    $probe = Invoke-App 'GET' 'auth/login.php' $null
 } catch {
     Write-Output ""
     Write-Output "ABORT: cannot reach $BaseUrl - is Apache running?"
@@ -130,18 +136,18 @@ if ($probe.Code -ne 200) {
 }
 
 $admin = New-Object System.Net.CookieContainer
-$adminLogin = Invoke-App 'POST' 'login.php' $admin @{
-    _token = (Get-Token 'login.php' $admin)
+$adminLogin = Invoke-App 'POST' 'auth/login.php' $admin @{
+    _token = (Get-Token 'auth/login.php' $admin)
     email = 'admin@clientflow.test'; password = 'admin123'
 }
-if ($adminLogin.Location -ne 'index.php') {
+if ($adminLogin.Location -notmatch 'index\.php$') {
     Write-Output "ABORT: admin login failed (got '$($adminLogin.Location)')"
     exit 1
 }
 
 $staff = New-Object System.Net.CookieContainer
-Invoke-App 'POST' 'login.php' $staff @{
-    _token = (Get-Token 'login.php' $staff)
+Invoke-App 'POST' 'auth/login.php' $staff @{
+    _token = (Get-Token 'auth/login.php' $staff)
     email = 'sarah@clientflow.test'; password = 'staff123'
 } | Out-Null
 
@@ -173,8 +179,8 @@ Assert 'no CDN references' (-not ($probe.Body -match 'cdn\.jsdelivr|unpkg\.com|c
 # ---------------------------------------------------------------- 2. exposure
 
 Section 'Sensitive files are not web-accessible'
-foreach ($secret in @('database.sql', 'README.md', 'config/config.php',
-                      'models/DealModel.php', 'includes/header.php', '.vscode/settings.json',
+foreach ($secret in @('database.sql', 'README.md', 'app/config/config.php',
+                      'app/models/DealModel.php', 'views/header.php', '.vscode/settings.json',
                       '.git/HEAD', '.git/config', '.gitignore', '.gitattributes')) {
     $status = Get-Status $secret
     Assert "blocked: /$secret" ($status -eq 403 -or $status -eq 404 -or $status -eq 404) "status=$status"
@@ -184,7 +190,7 @@ foreach ($dir in @('config/', 'models/', 'includes/', '.vscode/', '.git/')) {
     Assert "no listing: /$dir" ($status -eq 403 -or $status -eq 404) "status=$status"
 }
 # The app itself must still be reachable.
-foreach ($open in @('index.php', 'login.php', 'assets/css/style.css', 'assets/vendor/css/bootstrap.min.css')) {
+foreach ($open in @('index.php', 'auth/login.php', 'assets/css/style.css', 'assets/vendor/css/bootstrap.min.css')) {
     $status = Get-Status $open
     Assert "still served: /$open" ($status -eq 200) "status=$status"
 }
@@ -193,64 +199,64 @@ foreach ($open in @('index.php', 'login.php', 'assets/css/style.css', 'assets/ve
 
 Section 'Authentication'
 Assert 'admin reaches dashboard' ((Invoke-App 'GET' 'index.php' $admin).Code -eq 200)
-Assert 'staff blocked from /users' ((Invoke-App 'GET' 'users.php' $staff).Location -eq 'index.php')
+Assert 'staff blocked from /users' ((Invoke-App 'GET' 'admin/users.php' $staff).Location -match 'index\.php$')
 Assert 'staff nav hides Users' (-not ((Invoke-App 'GET' 'index.php' $staff).Body -match 'users\.php'))
-foreach ($page in @('index.php', 'clients.php', 'leads.php', 'pipeline.php', 'tasks.php',
-                    'activities.php', 'reports.php', 'users.php', 'profile.php')) {
+foreach ($page in @('index.php', 'clients/index.php', 'leads/index.php', 'pipeline/index.php', 'tasks/index.php',
+                    'activities/index.php', 'reports/index.php', 'admin/users.php', 'auth/profile.php')) {
     $guest = New-Object System.Net.CookieContainer
     $r = Invoke-App 'GET' $page $guest
     Assert "guest blocked: $page" ($r.Code -eq 302 -and $r.Location -match 'login\.php') "code=$($r.Code)"
 }
 $bad = New-Object System.Net.CookieContainer
-Invoke-App 'POST' 'login.php' $bad @{
-    _token = (Get-Token 'login.php' $bad); email = 'admin@clientflow.test'; password = 'nope'
+Invoke-App 'POST' 'auth/login.php' $bad @{
+    _token = (Get-Token 'auth/login.php' $bad); email = 'admin@clientflow.test'; password = 'nope'
 } | Out-Null
-Assert 'wrong password generic error' ((Invoke-App 'GET' 'login.php' $bad).Body -match 'do not match our records')
+Assert 'wrong password generic error' ((Invoke-App 'GET' 'auth/login.php' $bad).Body -match 'do not match our records')
 $unknown = New-Object System.Net.CookieContainer
-Invoke-App 'POST' 'login.php' $unknown @{
-    _token = (Get-Token 'login.php' $unknown); email = 'nobody@nowhere.test'; password = 'x'
+Invoke-App 'POST' 'auth/login.php' $unknown @{
+    _token = (Get-Token 'auth/login.php' $unknown); email = 'nobody@nowhere.test'; password = 'x'
 } | Out-Null
-Assert 'unknown email same error (no enumeration)' ((Invoke-App 'GET' 'login.php' $unknown).Body -match 'do not match our records')
+Assert 'unknown email same error (no enumeration)' ((Invoke-App 'GET' 'auth/login.php' $unknown).Body -match 'do not match our records')
 
 # ---------------------------------------------------------------- 4. pages
 
 Section 'Every page renders without PHP errors (admin + staff)'
 $adminPages = @(
-    'index.php','clients.php','clients.php?page=2','clients.php?status=active','clients.php?status=inactive',
+    'index.php','clients/index.php','clients.php?page=2','clients.php?status=active','clients.php?status=inactive',
     'clients.php?assigned_to=2','clients.php?sort=company&dir=desc','clients.php?sort=created&dir=asc',
     'clients.php?search=north','clients.php?search=zzzznope','clients.php?sort=BOGUS&dir=sideways',
     'client_view.php?id=1','client_view.php?id=8','client_view.php?id=12','client_view.php?id=999',
-    'client_form.php','client_form.php?id=1','client_form.php?id=6','client_form.php?id=999',
-    'leads.php','leads.php?page=2','leads.php?status=won','leads.php?source=event','leads.php?source=referral',
+    'clients/form.php','client_form.php?id=1','client_form.php?id=6','client_form.php?id=999',
+    'leads/index.php','leads.php?page=2','leads.php?status=won','leads.php?source=event','leads.php?source=referral',
     'leads.php?assigned_to=3','leads.php?sort=value&dir=desc','leads.php?search=zzzznope',
     'lead_view.php?id=1','lead_view.php?id=9','lead_view.php?id=14','lead_view.php?id=999',
-    'lead_form.php','lead_form.php?id=5','lead_form.php?id=7','lead_form.php?id=999',
-    'deal_form.php','deal_form.php?id=1','deal_form.php?id=7','deal_form.php?id=11',
+    'leads/form.php','lead_form.php?id=5','lead_form.php?id=7','lead_form.php?id=999',
+    'pipeline/form.php','deal_form.php?id=1','deal_form.php?id=7','deal_form.php?id=11',
     'deal_form.php?lead_id=8','deal_form.php?client_id=3',
-    'pipeline.php','pipeline.php?stage=won','pipeline.php?stage=negotiation','pipeline.php?assigned_to=2','pipeline.php?assigned_to=3',
-    'tasks.php','tasks.php?page=2','tasks.php?status=pending','tasks.php?status=completed','tasks.php?status=in_progress',
+    'pipeline/index.php','pipeline.php?stage=won','pipeline.php?stage=negotiation','pipeline.php?assigned_to=2','pipeline.php?assigned_to=3',
+    'tasks/index.php','tasks.php?page=2','tasks.php?status=pending','tasks.php?status=completed','tasks.php?status=in_progress',
     'tasks.php?priority=high','tasks.php?overdue=1','tasks.php?assigned_to=4','tasks.php?search=zzzznope',
-    'task_form.php','task_form.php?id=1','task_form.php?id=8','task_form.php?id=999',
+    'tasks/form.php','task_form.php?id=1','task_form.php?id=8','task_form.php?id=999',
     'task_form.php?client_id=1','task_form.php?lead_id=5',
-    'activities.php','activities.php?page=2','activities.php?type=call','activities.php?type=meeting',
+    'activities/index.php','activities.php?page=2','activities.php?type=call','activities.php?type=meeting',
     'activities.php?user_id=2','activities.php?date_from=2026-09-01&date_to=2026-09-30',
     'activities.php?client_id=1','activities.php?lead_id=1',
-    'activity_form.php','activity_form.php?id=1','activity_form.php?id=30','activity_form.php?id=999',
-    'reports.php','users.php','users.php?role=staff','users.php?search=sarah',
-    'user_form.php','user_form.php?id=2','user_form.php?id=999','profile.php'
+    'activities/form.php','activity_form.php?id=1','activity_form.php?id=30','activity_form.php?id=999',
+    'reports/index.php','admin/users.php','users.php?role=staff','users.php?search=sarah',
+    'admin/user_form.php','user_form.php?id=2','user_form.php?id=999','auth/profile.php'
 )
 foreach ($page in $adminPages) {
     Clear-Log
     $r = Invoke-App 'GET' $page $admin
     $errors = Get-LogErrors
     # A missing id or an authenticated hit on login.php correctly redirects.
-    $expectRedirect = ($page -match 'id=999') -or ($page -eq 'login.php')
+    $expectRedirect = ($page -match 'id=999') -or ($page -eq 'auth/login.php')
     $ok = if ($expectRedirect) { $r.Code -eq 302 -and $r.Location -ne '' }
           else { $r.Code -eq 200 -and $r.Body.Length -gt 3000 }
     Assert "admin $page" ($ok -and $errors.Count -eq 0) "code=$($r.Code) len=$($r.Body.Length) errs=$($errors.Count) $($errors -join ' | ')"
 }
-foreach ($page in @('index.php','clients.php','leads.php','pipeline.php','tasks.php',
-                    'activities.php','reports.php','profile.php','client_view.php?id=1','lead_view.php?id=1')) {
+foreach ($page in @('index.php','clients/index.php','leads/index.php','pipeline/index.php','tasks/index.php',
+                    'activities/index.php','reports/index.php','auth/profile.php','client_view.php?id=1','lead_view.php?id=1')) {
     Clear-Log
     $r = Invoke-App 'GET' $page $staff
     Assert "staff $page" ($r.Code -eq 200 -and $r.Body.Length -gt 3000 -and (Get-LogErrors).Count -eq 0) "code=$($r.Code)"
@@ -259,8 +265,8 @@ foreach ($page in @('index.php','clients.php','leads.php','pipeline.php','tasks.
 # ---------------------------------------------------------------- 5. CRUD
 
 Section 'CRUD lifecycle'
-$t = Get-Token 'client_form.php' $admin
-$r = Invoke-App 'POST' 'client_form.php' $admin @{
+$t = Get-Token 'clients/form.php' $admin
+$r = Invoke-App 'POST' 'clients/form.php' $admin @{
     _token = $t; company_name = 'Regression Co'; contact_person = 'RC'; email = 'rc@x.test'
     phone = '+44 161 000 0001'; address = '1 Test Way'; status = 'prospect'; assigned_to = 2; notes = 'regression'
 }
@@ -274,66 +280,66 @@ Assert 'owner filter works' ((Invoke-App 'GET' 'clients.php?assigned_to=2' $admi
 Assert 'sort works' ((Invoke-App 'GET' 'clients.php?sort=company&dir=asc' $admin).Body -match 'Northwind')
 
 $t = Get-Token "client_form.php?id=$cid" $admin
-$r = Invoke-App 'POST' 'client_form.php' $admin @{
+$r = Invoke-App 'POST' 'clients/form.php' $admin @{
     _token = $t; id = $cid; company_name = 'Regression Co 2'; contact_person = 'RC'
     email = 'rc@x.test'; status = 'active'; assigned_to = 3
 }
-Assert 'update client' ($r.Location -match "^client_view\.php\?id=$cid$") "location=$($r.Location)"
+Assert 'update client' ($r.Location -match "client_view\.php\?id=$cid$") "location=$($r.Location)"
 Assert 'update persisted' ((Invoke-App 'GET' "client_view.php?id=$cid" $admin).Body -match 'Regression Co 2')
 
-$t = Get-Token 'deal_form.php' $admin
-$r = Invoke-App 'POST' 'deal_form.php' $admin @{
+$t = Get-Token 'pipeline/form.php' $admin
+$r = Invoke-App 'POST' 'pipeline/form.php' $admin @{
     _token = $t; deal_title = 'Regression Deal'; client_id = $cid; value = '5000'
     stage = 'proposal'; expected_close_date = '2026-12-01'; assigned_to = 2
 }
-Assert 'create deal' ($r.Location -eq 'pipeline.php') "location=$($r.Location)"
-Assert 'deal on pipeline' ((Invoke-App 'GET' 'pipeline.php' $admin).Body -match 'Regression Deal')
+Assert 'create deal' ($r.Location -match 'pipeline/index\.php$') "location=$($r.Location)"
+Assert 'deal on pipeline' ((Invoke-App 'GET' 'pipeline/index.php' $admin).Body -match 'Regression Deal')
 $did = [int](Invoke-Sql "SELECT id FROM deals WHERE deal_title='Regression Deal' LIMIT 1;")
-$t = Get-Token 'pipeline.php' $admin
-Invoke-App 'POST' 'deal_action.php' $admin @{ _token = $t; action = 'move'; id = $did; stage = 'won'; return = 'pipeline.php' } | Out-Null
+$t = Get-Token 'pipeline/index.php' $admin
+Invoke-App 'POST' 'pipeline/action.php' $admin @{ _token = $t; action = 'move'; id = $did; stage = 'won'; return = 'pipeline/index.php' } | Out-Null
 Assert 'move deal to won' ((Invoke-Sql "SELECT stage FROM deals WHERE id=$did;") -eq 'won')
-$t = Get-Token 'pipeline.php' $admin
-Invoke-App 'POST' 'deal_action.php' $admin @{ _token = $t; action = 'move'; id = $did; stage = 'BOGUS'; return = 'pipeline.php' } | Out-Null
+$t = Get-Token 'pipeline/index.php' $admin
+Invoke-App 'POST' 'pipeline/action.php' $admin @{ _token = $t; action = 'move'; id = $did; stage = 'BOGUS'; return = 'pipeline/index.php' } | Out-Null
 Assert 'invalid stage rejected' ((Invoke-Sql "SELECT stage FROM deals WHERE id=$did;") -eq 'won')
 
-$t = Get-Token 'task_form.php' $admin
-$r = Invoke-App 'POST' 'task_form.php' $admin @{
+$t = Get-Token 'tasks/form.php' $admin
+$r = Invoke-App 'POST' 'tasks/form.php' $admin @{
     _token = $t; title = 'Regression Task'; client_id = $cid; due_date = '2026-11-15'
     priority = 'high'; status = 'pending'; assigned_to = 2
 }
-Assert 'create task' ($r.Location -eq 'tasks.php') "location=$($r.Location)"
+Assert 'create task' ($r.Location -match 'tasks/index\.php$') "location=$($r.Location)"
 $tid = [int](Invoke-Sql "SELECT id FROM tasks WHERE title='Regression Task' LIMIT 1;")
-$t = Get-Token 'tasks.php' $admin
-Invoke-App 'POST' 'task_action.php' $admin @{ _token = $t; action = 'complete'; id = $tid; return = 'tasks.php' } | Out-Null
+$t = Get-Token 'tasks/index.php' $admin
+Invoke-App 'POST' 'tasks/action.php' $admin @{ _token = $t; action = 'complete'; id = $tid; return = 'tasks/index.php' } | Out-Null
 Assert 'task completed + timestamp' (
     (Invoke-Sql "SELECT status FROM tasks WHERE id=$tid;") -eq 'completed' -and
     (Invoke-Sql "SELECT IFNULL(completed_at,'NULL') FROM tasks WHERE id=$tid;") -match '^20')
-$t = Get-Token 'tasks.php' $admin
-Invoke-App 'POST' 'task_action.php' $admin @{ _token = $t; action = 'reopen'; id = $tid; return = 'tasks.php' } | Out-Null
+$t = Get-Token 'tasks/index.php' $admin
+Invoke-App 'POST' 'tasks/action.php' $admin @{ _token = $t; action = 'reopen'; id = $tid; return = 'tasks/index.php' } | Out-Null
 Assert 'task reopened, timestamp cleared' (
     (Invoke-Sql "SELECT status FROM tasks WHERE id=$tid;") -eq 'pending' -and
     (Invoke-Sql "SELECT IFNULL(completed_at,'NULL') FROM tasks WHERE id=$tid;") -eq 'NULL')
 
-$t = Get-Token 'activity_form.php' $admin
-$r = Invoke-App 'POST' 'activity_form.php' $admin @{
+$t = Get-Token 'activities/form.php' $admin
+$r = Invoke-App 'POST' 'activities/form.php' $admin @{
     _token = $t; client_id = $cid; type = 'call'; title = 'Regression Call'; details = 'Tested'
 }
-Assert 'create activity returns to client' ($r.Location -match "^client_view\.php\?id=$cid$") "location=$($r.Location)"
+Assert 'create activity returns to client' ($r.Location -match "client_view\.php\?id=$cid$") "location=$($r.Location)"
 $detail = Invoke-App 'GET' "client_view.php?id=$cid" $admin
 Assert 'client detail aggregates deal+task+activity' (
     ($detail.Body -match 'Regression Deal') -and
     ($detail.Body -match 'Regression Task') -and
     ($detail.Body -match 'Regression Call'))
 
-$t = Get-Token 'lead_form.php' $admin
-$r = Invoke-App 'POST' 'lead_form.php' $admin @{
+$t = Get-Token 'leads/form.php' $admin
+$r = Invoke-App 'POST' 'leads/form.php' $admin @{
     _token = $t; lead_name = 'Regression Lead'; company = 'Regression Ltd'
     email = 'rl@x.test'; lead_source = 'event'; status = 'new'; estimated_value = '7000'; assigned_to = 4
 }
 $lid = [int]([regex]::Match($r.Location, 'id=(\d+)').Groups[1].Value)
 Assert 'create lead' ($lid -gt 0) "location=$($r.Location)"
-$t = Get-Token 'deal_form.php' $admin
-Invoke-App 'POST' 'deal_form.php' $admin @{
+$t = Get-Token 'pipeline/form.php' $admin
+Invoke-App 'POST' 'pipeline/form.php' $admin @{
     _token = $t; deal_title = 'Converted Deal'; client_id = $cid; lead_id = $lid
     value = '7000'; stage = 'negotiation'
 } | Out-Null
@@ -347,25 +353,25 @@ Section 'Validation rejects bad input'
 $clientFloor = [int](Invoke-Sql 'SELECT COALESCE(MAX(id),0) FROM clients;')
 $leadFloor   = [int](Invoke-Sql 'SELECT COALESCE(MAX(id),0) FROM leads;')
 $badInputs = @(
-    @{ n = 'client empty company';  p = 'client_form.php';   f = @{ company_name = ''; contact_person = 'x'; status = 'active' } },
-    @{ n = 'client bad email';     p = 'client_form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; email = 'nope' } },
-    @{ n = 'client bad status';    p = 'client_form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'BOGUS' } },
-    @{ n = 'client long contact';  p = 'client_form.php';   f = @{ company_name = 'x'; contact_person = ('A' * 121); status = 'active' } },
-    @{ n = 'client long phone';    p = 'client_form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; phone = ('1' * 41) } },
-    @{ n = 'client long address';  p = 'client_form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; address = ('a' * 256) } },
-    @{ n = 'lead empty name';      p = 'lead_form.php';     f = @{ lead_name = ''; lead_source = 'website'; status = 'new' } },
-    @{ n = 'lead bad source';      p = 'lead_form.php';     f = @{ lead_name = 'x'; lead_source = 'BOGUS'; status = 'new' } },
-    @{ n = 'lead negative value';  p = 'lead_form.php';     f = @{ lead_name = 'x'; lead_source = 'website'; status = 'new'; estimated_value = '-5' } },
-    @{ n = 'lead long company';    p = 'lead_form.php';     f = @{ lead_name = 'x'; lead_source = 'website'; status = 'new'; company = ('c' * 151) } },
-    @{ n = 'task bad priority';    p = 'task_form.php';     f = @{ title = 'x'; priority = 'BOGUS'; status = 'pending' } },
-    @{ n = 'task bad date';        p = 'task_form.php';     f = @{ title = 'x'; priority = 'low'; status = 'pending'; due_date = '2026-99-99' } },
-    @{ n = 'task long title';      p = 'task_form.php';     f = @{ title = ('t' * 181); priority = 'low'; status = 'pending' } },
-    @{ n = 'deal no link';         p = 'deal_form.php';     f = @{ deal_title = 'x'; client_id = 0; lead_id = 0; stage = 'won'; value = '1' } },
-    @{ n = 'deal bad stage';       p = 'deal_form.php';     f = @{ deal_title = 'x'; client_id = 1; stage = 'BOGUS'; value = '1' } },
-    @{ n = 'deal bad close date';  p = 'deal_form.php';     f = @{ deal_title = 'x'; client_id = 1; stage = 'won'; value = '1'; expected_close_date = '2026-13-45' } },
-    @{ n = 'activity orphan';      p = 'activity_form.php'; f = @{ client_id = 0; lead_id = 0; type = 'call'; title = 'x' } },
-    @{ n = 'activity bad type';    p = 'activity_form.php'; f = @{ client_id = 1; type = 'BOGUS'; title = 'x' } },
-    @{ n = 'activity long title';  p = 'activity_form.php'; f = @{ client_id = 1; type = 'note'; title = ('a' * 181) } }
+    @{ n = 'client empty company';  p = 'clients/form.php';   f = @{ company_name = ''; contact_person = 'x'; status = 'active' } },
+    @{ n = 'client bad email';     p = 'clients/form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; email = 'nope' } },
+    @{ n = 'client bad status';    p = 'clients/form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'BOGUS' } },
+    @{ n = 'client long contact';  p = 'clients/form.php';   f = @{ company_name = 'x'; contact_person = ('A' * 121); status = 'active' } },
+    @{ n = 'client long phone';    p = 'clients/form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; phone = ('1' * 41) } },
+    @{ n = 'client long address';  p = 'clients/form.php';   f = @{ company_name = 'x'; contact_person = 'y'; status = 'active'; address = ('a' * 256) } },
+    @{ n = 'lead empty name';      p = 'leads/form.php';     f = @{ lead_name = ''; lead_source = 'website'; status = 'new' } },
+    @{ n = 'lead bad source';      p = 'leads/form.php';     f = @{ lead_name = 'x'; lead_source = 'BOGUS'; status = 'new' } },
+    @{ n = 'lead negative value';  p = 'leads/form.php';     f = @{ lead_name = 'x'; lead_source = 'website'; status = 'new'; estimated_value = '-5' } },
+    @{ n = 'lead long company';    p = 'leads/form.php';     f = @{ lead_name = 'x'; lead_source = 'website'; status = 'new'; company = ('c' * 151) } },
+    @{ n = 'task bad priority';    p = 'tasks/form.php';     f = @{ title = 'x'; priority = 'BOGUS'; status = 'pending' } },
+    @{ n = 'task bad date';        p = 'tasks/form.php';     f = @{ title = 'x'; priority = 'low'; status = 'pending'; due_date = '2026-99-99' } },
+    @{ n = 'task long title';      p = 'tasks/form.php';     f = @{ title = ('t' * 181); priority = 'low'; status = 'pending' } },
+    @{ n = 'deal no link';         p = 'pipeline/form.php';     f = @{ deal_title = 'x'; client_id = 0; lead_id = 0; stage = 'won'; value = '1' } },
+    @{ n = 'deal bad stage';       p = 'pipeline/form.php';     f = @{ deal_title = 'x'; client_id = 1; stage = 'BOGUS'; value = '1' } },
+    @{ n = 'deal bad close date';  p = 'pipeline/form.php';     f = @{ deal_title = 'x'; client_id = 1; stage = 'won'; value = '1'; expected_close_date = '2026-13-45' } },
+    @{ n = 'activity orphan';      p = 'activities/form.php'; f = @{ client_id = 0; lead_id = 0; type = 'call'; title = 'x' } },
+    @{ n = 'activity bad type';    p = 'activities/form.php'; f = @{ client_id = 1; type = 'BOGUS'; title = 'x' } },
+    @{ n = 'activity long title';  p = 'activities/form.php'; f = @{ client_id = 1; type = 'note'; title = ('a' * 181) } }
 )
 foreach ($case in $badInputs) {
     Clear-Log
@@ -373,7 +379,7 @@ foreach ($case in $badInputs) {
     $fields['_token'] = Get-Token $case.p $admin
     $r = Invoke-App 'POST' $case.p $admin $fields
     $errors = Get-LogErrors
-    Assert "$($case.n) rejected, no PHP error" ($r.Location -match '\.php$' -and $errors.Count -eq 0) "location=$($r.Location) errs=$($errors.Count) $($errors -join ' | ')"
+    Assert "$($case.n) rejected, no PHP error" ($r.Location -match '\.php(\?[^#]*)?$' -and $errors.Count -eq 0) "location=$($r.Location) errs=$($errors.Count) $($errors -join ' | ')"
 }
 Assert 'validation section created no clients' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id > $clientFloor;") -eq '0') "clients above $clientFloor"
 Assert 'validation section created no leads' ((Invoke-Sql "SELECT COUNT(*) FROM leads WHERE id > $leadFloor;") -eq '0') "leads above $leadFloor"
@@ -386,21 +392,21 @@ Section 'Security'
 # instead: the record must still exist.
 $beforeCsrf = Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cid;"
 Assert 'POST without CSRF token changes nothing' (
-    (Invoke-App 'POST' 'client_action.php' $admin @{ action = 'delete'; id = $cid; return = 'clients.php' }) -and
+    (Invoke-App 'POST' 'clients/action.php' $admin @{ action = 'delete'; id = $cid; return = 'clients/index.php' }) -and
     (Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cid;") -eq $beforeCsrf)
 Assert 'POST with bad CSRF token changes nothing' (
-    (Invoke-App 'POST' 'client_action.php' $admin @{ _token = 'deadbeef'; action = 'delete'; id = $cid; return = 'clients.php' }) -and
+    (Invoke-App 'POST' 'clients/action.php' $admin @{ _token = 'deadbeef'; action = 'delete'; id = $cid; return = 'clients/index.php' }) -and
     (Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cid;") -eq $beforeCsrf)
 
 # The return parameter must be ignored as a redirect target. Use a throwaway
 # record so this does not disturb the CRUD fixture above.
-$t = Get-Token 'client_form.php' $admin
+$t = Get-Token 'clients/form.php' $admin
 $throwaway = [int]([regex]::Match(
-    (Invoke-App 'POST' 'client_form.php' $admin @{
+    (Invoke-App 'POST' 'clients/form.php' $admin @{
         _token = $t; company_name = 'Redirect Probe'; contact_person = 'RP'; status = 'prospect'
     }).Location, 'id=(\d+)').Groups[1].Value)
-$t = Get-Token 'clients.php' $admin
-$redirect = Invoke-App 'POST' 'client_action.php' $admin @{
+$t = Get-Token 'clients/index.php' $admin
+$redirect = Invoke-App 'POST' 'clients/action.php' $admin @{
     _token = $t; action = 'delete'; id = $throwaway; return = 'http://evil.test/'
 }
 Assert 'external return path not honoured' ($redirect.Location -notmatch 'evil\.test') "location=$($redirect.Location)"
@@ -413,8 +419,8 @@ Assert 'SQL injection in search safe' (-not ($r.Body -match 'SQLSTATE|Fatal erro
 $r = Invoke-App 'GET' ('clients.php?search=' + [uri]::EscapeDataString('<script>alert(1)</script>')) $admin
 Assert 'reflected XSS escaped' (-not ($r.Body.Contains('<script>alert(1)</script>')))
 
-$t = Get-Token 'client_form.php' $admin
-$r = Invoke-App 'POST' 'client_form.php' $admin @{
+$t = Get-Token 'clients/form.php' $admin
+$r = Invoke-App 'POST' 'clients/form.php' $admin @{
     _token = $t; company_name = '<script>alert(1)</script>XssRegression'
     contact_person = '"><img src=x onerror=alert(2)>'; status = 'active'
 }
@@ -424,25 +430,25 @@ Assert 'stored XSS escaped (script)' (-not ($xbody.Contains('<script>alert(1)</s
 Assert 'stored XSS escaped (attribute)' (-not ($xbody -match '<img[^>]*onerror'))
 Invoke-Sql "DELETE FROM clients WHERE id=$xid;" | Out-Null
 
-$t = Get-Token 'user_form.php' $admin
-Invoke-App 'POST' 'user_form.php' $admin @{
+$t = Get-Token 'admin/user_form.php' $admin
+Invoke-App 'POST' 'admin/user_form.php' $admin @{
     _token = $t; id = 1; name = 'Alex Morgan'; email = 'admin@clientflow.test'
     role = 'staff'; password = ''; is_active = '1'
 } | Out-Null
 Assert 'cannot demote the only admin' ((Invoke-Sql 'SELECT role FROM users WHERE id=1;') -eq 'admin')
 Assert 'last-admin error surfaced' ((Invoke-App 'GET' 'user_form.php?id=1' $admin).Body -match 'only active admin')
-$t = Get-Token 'users.php' $admin
-Invoke-App 'POST' 'user_action.php' $admin @{ _token = $t; action = 'delete'; id = 1 } | Out-Null
+$t = Get-Token 'admin/users.php' $admin
+Invoke-App 'POST' 'admin/user_action.php' $admin @{ _token = $t; action = 'delete'; id = 1 } | Out-Null
 Assert 'admin cannot delete own account' ((Invoke-Sql 'SELECT COUNT(*) FROM users WHERE id=1;') -eq '1')
 
-$t = Get-Token 'profile.php' $admin
-Invoke-App 'POST' 'profile.php' $admin @{
+$t = Get-Token 'auth/profile.php' $admin
+Invoke-App 'POST' 'auth/profile.php' $admin @{
     _token = $t; action = 'password'; current_password = 'wrongpass'
     new_password = 'abcdefgh123'; confirm_password = 'abcdefgh123'
 } | Out-Null
-Assert 'wrong current password rejected' ((Invoke-App 'GET' 'profile.php' $admin).Body -match 'current password is not correct')
-$t = Get-Token 'profile.php' $admin
-Invoke-App 'POST' 'profile.php' $admin @{
+Assert 'wrong current password rejected' ((Invoke-App 'GET' 'auth/profile.php' $admin).Body -match 'current password is not correct')
+$t = Get-Token 'auth/profile.php' $admin
+Invoke-App 'POST' 'auth/profile.php' $admin @{
     _token = $t; action = 'details'; name = 'Alex Morgan'; email = 'sarah@clientflow.test'
 } | Out-Null
 Assert 'profile duplicate email rejected' ((Invoke-Sql 'SELECT email FROM users WHERE id=1;') -eq 'admin@clientflow.test')
@@ -450,7 +456,7 @@ Assert 'profile duplicate email rejected' ((Invoke-Sql 'SELECT email FROM users 
 # ---------------------------------------------------------------- 8. reports
 
 Section 'Reports content'
-$reports = Invoke-App 'GET' 'reports.php' $admin
+$reports = Invoke-App 'GET' 'reports/index.php' $admin
 foreach ($block in @('Monthly activity','Deal values by stage','Team performance','Won vs lost',
                      'Lead sources','Activity mix','Clients by owner','Recent wins')) {
     Assert "reports: $block" ($reports.Body -match [regex]::Escape($block))
@@ -459,7 +465,7 @@ foreach ($block in @('Monthly activity','Deal values by stage','Team performance
 # ---------------------------------------------------------------- 9. accessibility
 
 Section 'Accessibility spot checks'
-foreach ($page in @('clients.php','leads.php','tasks.php','activities.php','users.php')) {
+foreach ($page in @('clients/index.php','leads/index.php','tasks/index.php','activities/index.php','admin/users.php')) {
     $html = (Invoke-App 'GET' $page $admin).Body
     # <th\b so the opening <thead> tag is not counted as a header cell.
     $th = ([regex]::Matches($html, '<th\b')).Count
@@ -474,20 +480,20 @@ foreach ($page in @('clients.php','leads.php','tasks.php','activities.php','user
 
 Section 'Flash messages render once'
 foreach ($case in @(
-    @{ n = 'create client'; p = 'client_form.php';   f = @{ company_name = 'Flash Co'; contact_person = 'F'; status = 'prospect' }; loc = 'clients.php'; expect = 'was created' },
-    @{ n = 'delete client'; p = 'client_action.php'; f = @{ action = 'delete'; return = 'clients.php' }; loc = 'clients.php'; expect = 'was deleted' },
-    @{ n = 'create lead';   p = 'lead_form.php';     f = @{ lead_name = 'FlashLead'; lead_source = 'website'; status = 'new'; estimated_value = '10' }; loc = 'leads.php'; expect = 'was created' },
-    @{ n = 'create task';   p = 'task_form.php';     f = @{ title = 'FlashTask'; priority = 'low'; status = 'pending'; due_date = '2026-12-01' }; loc = 'tasks.php'; expect = 'was created' },
-    @{ n = 'create deal';   p = 'deal_form.php';     f = @{ deal_title = 'FlashDeal'; client_id = 1; stage = 'contacted'; value = '42' }; loc = 'pipeline.php'; expect = 'added to the pipeline' }
+    @{ n = 'create client'; p = 'clients/form.php';   f = @{ company_name = 'Flash Co'; contact_person = 'F'; status = 'prospect' }; loc = 'clients/index.php'; expect = 'was created' },
+    @{ n = 'delete client'; p = 'clients/action.php'; f = @{ action = 'delete'; return = 'clients/index.php' }; loc = 'clients/index.php'; expect = 'was deleted' },
+    @{ n = 'create lead';   p = 'leads/form.php';     f = @{ lead_name = 'FlashLead'; lead_source = 'website'; status = 'new'; estimated_value = '10' }; loc = 'leads/index.php'; expect = 'was created' },
+    @{ n = 'create task';   p = 'tasks/form.php';     f = @{ title = 'FlashTask'; priority = 'low'; status = 'pending'; due_date = '2026-12-01' }; loc = 'tasks/index.php'; expect = 'was created' },
+    @{ n = 'create deal';   p = 'pipeline/form.php';     f = @{ deal_title = 'FlashDeal'; client_id = 1; stage = 'contacted'; value = '42' }; loc = 'pipeline/index.php'; expect = 'added to the pipeline' }
 )) {
     # The token must come from a GET page. *_action.php endpoints are POST-only
     # and return an empty 302, so they carry no usable token.
     $fields = $case.f.Clone()
     $fields['_token'] = Get-Token $case.loc $admin
-    if ($case.p -like '*_action.php') {
+    if ($case.p -like '*action.php') {
         $table = 'clients'; $col = 'company_name'
-        if ($case.p -like 'lead*') { $table = 'leads'; $col = 'lead_name' }
-        if ($case.p -like 'task*') { $table = 'tasks'; $col = 'title' }
+        if ($case.p -like 'leads*')    { $table = 'leads'; $col = 'lead_name' }
+        if ($case.p -like 'tasks*')    { $table = 'tasks'; $col = 'title' }
         $target = Invoke-Sql "SELECT id FROM $table WHERE $col LIKE 'Flash%' LIMIT 1;"
         Assert "$($case.n): fixture row exists" ($target -match '^\d+$') "id='$target'"
         $fields['id'] = $target
@@ -502,12 +508,12 @@ foreach ($case in @(
 # ---------------------------------------------------------------- 11. user modal
 
 Section 'Create-user modal reopens on validation failure'
-$t = Get-Token 'users.php' $admin
-Invoke-App 'POST' 'user_action.php' $admin @{
+$t = Get-Token 'admin/users.php' $admin
+Invoke-App 'POST' 'admin/user_action.php' $admin @{
     _token = $t; action = 'create'; name = 'Modal Test'; email = 'sarah@clientflow.test'
     password = 'password123'; role = 'staff'
 } | Out-Null
-$usersPage = (Invoke-App 'GET' 'users.php' $admin).Body
+$usersPage = (Invoke-App 'GET' 'admin/users.php' $admin).Body
 Assert 'duplicate-email error reaches the page' ($usersPage -match 'already uses that email')
 Assert 'page instructs the modal to reopen' ($usersPage -match 'data-reopen-modal|bootstrap\.Modal')
 
