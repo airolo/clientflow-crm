@@ -28,6 +28,18 @@ Needs PowerShell 5.1 (bundled with Windows) and `mysql.exe` at
 `C:\xampp\mysql\bin\mysql.exe`. Override with `-BaseUrl` if your project folder
 is named differently.
 
+### It needs the demo passwords
+
+The suite signs in as `admin@clientflow.test` / `admin123` and
+`sarah@clientflow.test` / `staff123`. The app forces a password change on every
+seeded account, so once you follow its own instructions those passwords stop
+matching and the suite aborts with `ABORT: admin login failed`.
+
+It will not reset the password itself: silently overwriting the admin password
+of whatever database it is pointed at would be worse than failing. Re-import
+`database.sql` to get the seeded state back, or set the hash by hand. The proper
+fix — provisioning throwaway accounts — is not done yet.
+
 ## verify_phase1.ps1
 
 24 checks covering the sign-in hardening on its own: `DEMO_MODE` gating, the

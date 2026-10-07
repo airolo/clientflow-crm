@@ -69,7 +69,7 @@ $r = Post $ctx 'auth/login.php' @{ email = 'admin@clientflow.test'; password = '
 Check "seeded admin sign-in succeeds and is held at change_password" ((LandedOn $r) -eq 'auth/change_password.php') "landed=$(LandedOn $r)"
 
 # Any guarded page must bounce to change_password.
-$dash = Invoke-WebRequest "$BaseUrl/index.php" -WebSession $ctx.Session -UseBasicParsing -TimeoutSec 15
+$dash = Invoke-WebRequest "$BaseUrl/dashboard.php" -WebSession $ctx.Session -UseBasicParsing -TimeoutSec 15
 Check "dashboard redirects a flagged account to change_password" ((LandedOn $dash) -eq 'auth/change_password.php') "landed=$(LandedOn $dash)"
 
 # And the same for a non-dashboard guarded page.
@@ -138,7 +138,7 @@ $good = Post $ctx4 'auth/change_password.php' @{ current_password = 'staff123'; 
 $flagAfter = (Sql "USE clientflow_crm; SELECT must_change_password FROM users WHERE id=4;")
 Check "flag cleared after a successful change" ($flagAfter -eq '0')
 
-$dashAfter = Invoke-WebRequest "$BaseUrl/index.php" -WebSession $ctx4.Session -UseBasicParsing -TimeoutSec 15
+$dashAfter = Invoke-WebRequest "$BaseUrl/dashboard.php" -WebSession $ctx4.Session -UseBasicParsing -TimeoutSec 15
 Check "dashboard reachable after the change" ($dashAfter.Content -notmatch 'change_password')
 
 # Old password must no longer work; new one must.

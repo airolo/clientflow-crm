@@ -20,7 +20,7 @@ $pageTitle    = 'Clients';                       // <title> and breadcrumb
 $pageHeading  = 'Clients';                       // the H1
 $pageSubtitle = '12 accounts on file';           // optional line under the H1
 $activeNav    = 'clients';                       // highlights the sidebar link
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Clients' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Clients' => null];
 $pageActions  = [['label' => 'Add client', 'href' => 'clients/form.php', 'icon' => 'bi-plus-lg']];
 $reopenModal  = '';                              // reopens a dialog after a failed submit
 ```

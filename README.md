@@ -18,9 +18,14 @@ file, and it runs.
 5. [Project structure](#project-structure)
 6. [Database schema](#database-schema)
 7. [How the code fits together](#how-the-code-fits-together)
-8. [Security notes](#security-notes)
-9. [Customising it](#customising-it)
-10. [Troubleshooting](#troubleshooting)
+8. [The landing page](#the-landing-page)
+9. [Security notes](#security-notes)
+10. [Backwards compatibility](#backwards-compatibility)
+11. [Customising it](#customising-it)
+12. [Troubleshooting](#troubleshooting)
+13. [Running the tests](#running-the-tests)
+14. [Migrations](#migrations)
+15. [Licence](#licence)
 
 ---
 
@@ -108,7 +113,7 @@ comparing its own location against the document root, so nothing needs reconfigu
 4. Leave **Character set of the file** as `utf-8` (the file sets `utf8mb4` itself)
 5. Click **Go** / **Import**
 
-The script creates the `clientflow_crm` database, all six tables and the demo data. You should see
+The script creates the `clientflow_crm` database, all seven tables and the demo data. You should see
 `clientflow_crm` appear in the left sidebar.
 
 > The SQL file starts with `DROP TABLE IF EXISTS`, so re-importing resets the database to the demo
@@ -431,6 +436,38 @@ saving does not resubmit, and success messages survive the hop through the sessi
 
 ---
 
+## The landing page
+
+`index.php` is the only page in the project that is **not** behind `require_login()`. It is the
+site root, so it is what a visitor sees first and it has three rules of its own.
+
+**It renders no business data.** The whole page is static markup defined in arrays at the top of
+the file — feature bullets, workflow steps, FAQ entries. It never calls a model function. That is
+deliberate: a public page that is indexed, cached or scraped must not be able to expose a
+customer's name, and "it does not query the database" is a guarantee rather than a review item.
+
+**It claims only what the app does.** The Integrations tab is split into what ships and a
+*Not built yet* list, and the FAQ answers the awkward ones directly ("Can I export to CSV?" →
+"No — `tools/backup.ps1` produces a mysqldump"). A CRM that lists integrations it does not have
+is worse than one that admits it, and the repo is public enough that anyone can check.
+
+**It has its own stylesheet, layered on top of the app's.** `index.php` loads `style.css` first,
+then `assets/css/landing.css`. That ordering matters: `style.css` owns the brand tokens
+(`--cf-primary`) and `.brand-mark`, and loading the page without it makes every `var(--cf-primary)`
+invalid. That is not hypothetical — it is how the hero headline first rendered as invisible text,
+because `color: transparent` had an invalid gradient behind it. `tools/regression.ps1` now checks
+that every custom property `landing.css` reads is actually defined.
+
+Its screenshots in `assets/img/` are real captures of a running installation, taken with Edge
+headless against a throwaway copy whose `require_login()` was patched to inject a session. That
+copy lived only at `htdocs/_shot`, was restricted to `Require local` while it existed, and was
+deleted immediately afterwards — nothing that bypasses authentication is committed.
+
+The dashboard moved to `dashboard.php` to make room. An old bookmark to `/index.php` now lands on
+the marketing page, where **Sign in** is the first button.
+
+---
+
 ## Security notes
 
 - **Passwords** are stored with `password_hash()` (bcrypt) and checked with `password_verify()`.
@@ -625,10 +662,10 @@ Re-import `database.sql`. It drops and recreates everything back to the demo sta
 
 `tools/regression.ps1` drives the running site over HTTP and asserts on real behaviour: every
 page under both roles, CRUD lifecycles, validation rejections, CSRF, stored and reflected XSS, SQL
-injection attempts, the forced password change, sign-in throttling, flash messages, accessibility
-spot checks and orphaned rows. It also reads the Apache error log after each request rather than
-trusting the response body, because `display_errors` can be on and still hide warnings from a
-body-level scan.
+injection attempts, the forced password change, sign-in throttling, soft delete and restore, the
+landing page, flash messages, accessibility spot checks and orphaned rows. It also reads the Apache
+error log after each request rather than trusting the response body, because `display_errors` can be
+on and still hide warnings from a body-level scan.
 
 ```powershell
 # XAMPP running, project in htdocs, database.sql imported
@@ -641,8 +678,29 @@ works as a pre-commit check. It needs PowerShell 5.1 (bundled with Windows) and 
 path as `C:\xampp\mysql\bin\mysql.exe`; override with `-BaseUrl` if your folder is named
 differently.
 
+### The suite signs in with the demo accounts
+
+**It needs `admin@clientflow.test` / `admin123` and `sarah@clientflow.test` / `staff123` to still
+be set.** The app forces a password change on every seeded account, so following its own
+instructions means those passwords stop matching and the suite aborts at sign-in with
+`ABORT: admin login failed`.
+
+That is a real rough edge rather than a test bug: the suite shares the demo credentials rather
+than provisioning its own accounts, and it deliberately will not reset a password itself — doing
+so would quietly overwrite the admin password of whatever database it is pointed at. Put it back
+with:
+
+```sql
+UPDATE users SET password_hash = '<bcrypt of admin123>' WHERE email = 'admin@clientflow.test';
+```
+
+or re-import `database.sql`, which restores the seeded state and forgets everything else. The
+proper fix is for the suite to create its own throwaway accounts; that is not done yet.
+
 `tools/verify_phase1.ps1` covers the sign-in hardening workstream on its own (24 checks) and is
-handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`.
+handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`. It has the
+same dependency: it signs in as `priya@clientflow.test` and restores that password itself
+afterwards, so interrupt it mid-run and re-import to be safe.
 
 ---
 
