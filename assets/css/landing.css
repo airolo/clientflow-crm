@@ -1,0 +1,370 @@
+/* =============================================================
+   ClientFlow CRM - landing page styles
+   -------------------------------------------------------------
+   Layered on top of style.css, which owns the shared design
+   tokens (--cf-primary, --cf-bg, .brand-mark and friends). Loaded
+   after it, so this file adds only marketing-page rules and never
+   restates a brand colour that could drift out of step.
+
+   Loaded only by index.php, so nothing here can affect the
+   signed-in shell.
+   ============================================================= */
+
+/* Its own tokens, for the values style.css does not define. */
+:root {
+    --lp-ink: #0f172a;
+    --lp-muted: #64748b;
+    --lp-line: #e6e9f0;
+    --lp-bg: #ffffff;
+    --lp-alt: #f7f8fc;
+    --lp-radius: 14px;
+    --lp-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 12px 32px rgba(15, 23, 42, .07);
+}
+
+body.lp {
+    background: var(--lp-bg);
+    color: var(--lp-ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Keyboard users get a way past the nav; hidden until focused. */
+.lp-skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+    background: var(--cf-primary);
+    color: #fff;
+    padding: .6rem 1rem;
+    border-radius: 0 0 .5rem 0;
+}
+.lp-skip:focus { left: 0; }
+
+/* ------------------------------------------------------------ nav */
+.lp-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(255, 255, 255, .88);
+    backdrop-filter: saturate(180%) blur(10px);
+    border-bottom: 1px solid var(--lp-line);
+}
+.lp-nav .container { min-height: 64px; }
+.lp-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--lp-ink);
+}
+.lp-nav-links { gap: .25rem; }
+.lp-nav-links a {
+    color: var(--lp-muted);
+    text-decoration: none;
+    font-size: .9rem;
+    padding: .4rem .6rem;
+    border-radius: .5rem;
+}
+.lp-nav-links a:hover { color: var(--cf-primary); background: #f1f2ff; }
+
+/* ------------------------------------------------------------ hero */
+.lp-hero {
+    padding: 4.5rem 0 3.5rem;
+    background:
+        radial-gradient(900px 380px at 12% -8%, rgba(79, 70, 229, .13), transparent 60%),
+        radial-gradient(760px 320px at 92% 4%, rgba(2, 132, 199, .10), transparent 62%);
+}
+.lp-pill {
+    display: inline-block;
+    background: #eef0ff;
+    color: var(--cf-primary);
+    font-size: .82rem;
+    font-weight: 600;
+    padding: .35rem .8rem;
+    border-radius: 999px;
+    margin-bottom: 1.1rem;
+}
+.lp-h1 {
+    font-size: clamp(2.1rem, 5vw, 3.3rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    margin-bottom: 1rem;
+}
+.lp-grad {
+    background: linear-gradient(92deg, var(--cf-primary), #0284c7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.lp-lead {
+    font-size: 1.1rem;
+    color: var(--lp-muted);
+    line-height: 1.65;
+    max-width: 34rem;
+    margin-bottom: 1.5rem;
+}
+.lp-fine {
+    font-size: .85rem;
+    color: var(--lp-muted);
+    line-height: 1.6;
+}
+
+/* ------------------------------------------------------------ sections */
+.lp-section { padding: 4rem 0; }
+.lp-section-alt { background: var(--lp-alt); }
+.lp-h2 {
+    font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+    font-weight: 750;
+    letter-spacing: -.015em;
+    margin-bottom: .5rem;
+}
+.lp-sub { color: var(--lp-muted); max-width: 40rem; margin: 0 auto; }
+.lp-body { color: #334155; line-height: 1.75; }
+
+/* ------------------------------------------------------------ stats */
+.lp-stats { padding: 0 0 3rem; }
+.lp-stat {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: .9rem 1rem;
+    height: 100%;
+}
+.lp-stat > i { font-size: 1.35rem; color: var(--cf-primary); }
+.lp-stat-label { font-weight: 650; font-size: .95rem; }
+.lp-stat-hint { font-size: .78rem; color: var(--lp-muted); }
+
+/* ------------------------------------------------------------ tabs */
+.lp-tabs { gap: .4rem; flex-wrap: wrap; }
+.lp-tabs .nav-link {
+    border-radius: 999px;
+    color: var(--lp-muted);
+    font-weight: 550;
+    padding: .5rem 1.05rem;
+}
+.lp-tabs .nav-link.active {
+    background: var(--cf-primary);
+    color: #fff;
+}
+.lp-tabs .nav-link:not(.active):hover { background: #eef0ff; color: var(--cf-primary); }
+.lp-tab-content { min-height: 320px; }
+
+.lp-card {
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: 1.4rem 1.5rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+.lp-card-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin-bottom: .85rem;
+}
+.lp-card-title i { color: var(--cf-primary); }
+.lp-card-title-muted i { color: #94a3b8; }
+
+.lp-list { list-style: none; padding: 0; margin: 0; }
+.lp-list li {
+    position: relative;
+    padding-left: 1.3rem;
+    margin-bottom: .5rem;
+    font-size: .9rem;
+    color: #475569;
+    line-height: 1.6;
+}
+.lp-list li::before {
+    content: "\f272";              /* bi-check2, per assets/vendor/css/bootstrap-icons.min.css */
+    font-family: "bootstrap-icons";
+    position: absolute;
+    left: 0;
+    top: .05rem;
+    color: #10b981;
+    font-size: .85rem;
+}
+.lp-list-muted li { color: var(--lp-muted); }
+/* bi-dash, not a funnel: \f3e1 is bi-funnel and looks like a filter icon here. */
+.lp-list-muted li::before { content: "\f2ea"; color: #cbd5e1; }
+
+/* ------------------------------------------------------------ screenshots */
+.lp-shot {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    box-shadow: var(--lp-shadow);
+    background: #fff;
+}
+.lp-shot-hero { box-shadow: 0 20px 50px rgba(15, 23, 42, .14); }
+.lp-shot-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .6rem;
+    aspect-ratio: 16 / 10;
+    border: 1px dashed #cbd5e1;
+    border-radius: var(--lp-radius);
+    background: var(--lp-alt);
+    color: #94a3b8;
+    font-size: .85rem;
+}
+.lp-shot-placeholder i { font-size: 1.8rem; }
+.lp-figure {
+    margin: 0;
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: .75rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+.lp-figure .lp-shot { border: 0; box-shadow: none; }
+.lp-figure figcaption {
+    font-size: .8rem;
+    color: var(--lp-muted);
+    padding: .65rem .35rem .15rem;
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------ workflow */
+.lp-steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+.lp-steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 1.1rem 2.6rem;
+    margin: 0;
+}
+.lp-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    background: #eef0ff;
+    color: var(--cf-primary);
+    font-weight: 700;
+    font-size: .85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Connecting line between the circles, stopped short of the last one. */
+.lp-steps li::after {
+    content: "";
+    position: absolute;
+    left: .84rem;
+    top: 1.85rem;
+    bottom: .35rem;
+    width: 2px;
+    background: var(--lp-line);
+}
+.lp-steps li:last-child { padding-bottom: 0; }
+.lp-steps li:last-child::after { display: none; }
+.lp-steps strong { display: block; font-size: .97rem; margin-bottom: .15rem; }
+.lp-steps span { font-size: .88rem; color: var(--lp-muted); line-height: 1.6; }
+
+/* ------------------------------------------------------------ faq */
+.lp-accordion .accordion-item {
+    border: 1px solid var(--lp-line);
+    border-radius: .75rem !important;
+    margin-bottom: .6rem;
+    overflow: hidden;
+    background: var(--lp-bg);
+}
+.lp-accordion .accordion-button {
+    font-weight: 600;
+    font-size: .97rem;
+    padding: 1rem 1.15rem;
+    box-shadow: none !important;
+}
+.lp-accordion .accordion-button:not(.collapsed) { color: var(--cf-primary); }
+.lp-accordion .accordion-body { padding: 0 1.15rem 1.1rem; font-size: .92rem; }
+.lp-accordion code {
+    background: #f1f2f6;
+    color: #475569;
+    padding: .1rem .35rem;
+    border-radius: .3rem;
+    font-size: .88em;
+}
+
+/* ------------------------------------------------------------ setup */
+.lp-setup { list-style: none; padding: 0; margin: 0; counter-reset: setup; }
+.lp-setup li {
+    counter-increment: setup;
+    position: relative;
+    padding: 0 0 1.4rem 3rem;
+}
+.lp-setup li::before {
+    content: counter(setup);
+    position: absolute;
+    left: 0;
+    top: -.1rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: .6rem;
+    background: var(--cf-primary);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.lp-setup h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: .3rem; }
+.lp-setup p { color: var(--lp-muted); font-size: .92rem; margin: 0; line-height: 1.65; }
+.lp-setup code {
+    background: #f1f2f6;
+    padding: .1rem .35rem;
+    border-radius: .3rem;
+    font-size: .88em;
+}
+.lp-setup li:last-child { padding-bottom: 0; }
+
+.lp-callout {
+    display: flex;
+    gap: .75rem;
+    background: #fef4e2;
+    border: 1px solid #fde3b0;
+    border-radius: var(--lp-radius);
+    padding: 1rem 1.15rem;
+    font-size: .9rem;
+    color: #7c5410;
+    line-height: 1.65;
+}
+.lp-callout i { font-size: 1.05rem; color: #d97706; }
+.lp-callout code {
+    background: rgba(255, 255, 255, .7);
+    padding: .05rem .3rem;
+    border-radius: .25rem;
+}
+
+/* ------------------------------------------------------------ footer */
+.lp-foot {
+    border-top: 1px solid var(--lp-line);
+    background: var(--lp-alt);
+    padding: 2.5rem 0;
+    margin-top: 2rem;
+}
+.lp-foot a { color: var(--cf-primary); text-decoration: none; }
+.lp-foot a:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------------ motion */
+@media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; transition: none !important; }
+}
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+
+@media (max-width: 991.98px) {
+    .lp-hero { padding: 3rem 0 2.5rem; }
+    .lp-section { padding: 3rem 0; }
+}

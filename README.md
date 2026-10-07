@@ -26,6 +26,12 @@ file, and it runs.
 
 ## Features
 
+**Landing page** — `/` is a public marketing page: hero, about, and five tabs (Features, Live
+preview, Workflow, Integrations, FAQ) plus a four-step setup section. It renders no business data —
+it is static markup, so it cannot leak customer details by being indexed or cached — and it names
+what has *not* been built as plainly as what has. Its screenshots are real captures of this app.
+The signed-in dashboard lives at `/dashboard.php`.
+
 **Dashboard** — total clients, active leads, open deals, won deals, pending tasks and total
 interactions as stat tiles; pipeline value by stage; leads by status; tasks due today or overdue;
 largest open deals; recent activity feed; hot leads not yet on the pipeline.
@@ -84,8 +90,11 @@ Copy the whole `ClientFlow` folder into XAMPP's web root so the path looks like:
 
 ```
 C:\xampp\htdocs\ClientFlow\index.php
+C:\xampp\htdocs\ClientFlow\dashboard.php
 C:\xampp\htdocs\ClientFlow\database.sql
 ```
+
+`/` serves the public landing page; `/dashboard.php` is the app and needs a sign-in.
 
 On macOS it is `/Applications/XAMPP/htdocs/ClientFlow/`, on Linux `/opt/lampp/htdocs/ClientFlow/`.
 The folder name can be anything — `APP_URL` works out where the project is served from by
@@ -169,7 +178,8 @@ deliberately overdue) and 30 timestamped activities.
 ```
 ClientFlow/
 │
-├── index.php                     # dashboard — the only page at the root
+├── index.php                     # public landing page — no sign-in required
+├── dashboard.php                 # the app, behind require_login()
 │
 ├── auth/                         # sign in, sign out, my profile
 │   ├── login.php
@@ -249,14 +259,16 @@ ClientFlow/
 │   └── README.md
 │
 ├── assets/
-│   ├── css/style.css
+│   ├── css/style.css              #   the signed-in shell
+│   ├── css/landing.css            #   layered on top, for index.php only
 │   ├── js/app.js
-│   └── vendor/                   # Bootstrap 5 + Icons, vendored for offline use
+│   ├── img/                       # landing-page screenshots of this app
+│   └── vendor/                    # Bootstrap 5 + Icons, vendored for offline use
 │       ├── css/  js/  fonts/
-│       └── README.txt            # versions, licences, local modification
+│       └── README.txt             # versions, licences, local modification
 │
 ├── tools/
-│   ├── regression.ps1            # 279-assertion end-to-end suite
+│   ├── regression.ps1            # 321-assertion end-to-end suite
 │   ├── verify_phase1.ps1         # 24 checks for the sign-in hardening
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -561,7 +573,7 @@ paths.
 | Forecast probabilities | `app/models/ReportModel.php` (`report_win_rate()`) |
 | List filters, search columns, sortable columns | the `list_query()` call at the top of each `*_list()` |
 | Table columns | `select` in that `list_query()` config, plus the `<thead>` in the page |
-| Dashboard tiles | the `$tiles` array near the top of `index.php` |
+| Dashboard tiles | the `$tiles` array near the top of `dashboard.php` |
 | Confirmation dialogs | `assets/js/app.js` (`data-confirm` on any button or link) |
 
 ---

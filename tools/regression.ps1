@@ -242,6 +242,101 @@ Assert 'sidebar Users icon is a real one' (
     $usersIcon -ne '' -and [regex]::IsMatch($iconCss, '\.' + [regex]::Escape($usersIcon) + '(?=::|[,\s{])')
 ) "icon='$usersIcon'"
 
+# Raw Bootstrap Icons codepoints, used by landing.css for list markers because
+# they cannot be expressed as a class. A wrong codepoint renders the wrong
+# glyph and nothing complains: \f3e1 is bi-funnel, not a dash.
+#
+# Resolving the codepoints the page *actually uses* against the font is the only
+# version of this check that bites - verifying the font's idea of \f2ea says
+# nothing about whether the page uses \f2ea.
+$landingCssForIcons = Get-Content (Join-Path $ProjectRoot 'assets\css\landing.css') -Raw
+$allowedGlyphs = @('bi-check2', 'bi-dash')
+$usedCodepoints = [regex]::Matches($landingCssForIcons, 'content:\s*"\\([0-9a-fA-F]{4})"')
+Assert 'landing.css declares the expected list markers' ($usedCodepoints.Count -eq 2) "found $($usedCodepoints.Count)"
+foreach ($m in $usedCodepoints) {
+    $cp = $m.Groups[1].Value.ToLower()
+    $hit = [regex]::Match($iconCss, '\.(bi-[a-z0-9-]+)::before\{content:"\\' + $cp + '"\}')
+    $glyph = if ($hit.Success) { $hit.Groups[1].Value } else { 'not in the font' }
+    # Concatenated rather than interpolated: "\$$cp" would expand PowerShell's
+    # $$ automatic variable instead of printing the codepoint.
+    Assert ('landing.css codepoint ' + $cp + ' is a list-marker glyph') `
+        ($allowedGlyphs -contains $glyph) "resolved to $glyph"
+}
+
+# Every CSS custom property landing.css reads must be defined somewhere it can
+# see. An undefined var() invalidates the whole declaration, which is how the
+# hero headline rendered as invisible text: color:transparent on top of a
+# gradient that did not exist.
+$landingCss = Get-Content (Join-Path $ProjectRoot 'assets\css\landing.css') -Raw
+$appCss     = Get-Content (Join-Path $ProjectRoot 'assets\css\style.css') -Raw
+$definedVars = @{}
+foreach ($css in @($landingCss, $appCss)) {
+    foreach ($m in [regex]::Matches($css, '(--[a-z0-9-]+)\s*:')) { $definedVars[$m.Groups[1].Value] = $true }
+}
+$undefinedVars = @()
+foreach ($m in [regex]::Matches($landingCss, 'var\((--[a-z0-9-]+)')) {
+    if (-not $definedVars.ContainsKey($m.Groups[1].Value)) { $undefinedVars += $m.Groups[1].Value }
+}
+Assert 'every CSS variable landing.css uses is defined' ($undefinedVars.Count -eq 0) `
+    "undefined: $(($undefinedVars | Sort-Object -Unique) -join ', ')"
+
+# ---------------------------------------------------------------- 2. landing page
+
+Section 'Landing page'
+$anon = New-Object System.Net.CookieContainer
+$root = Invoke-App 'GET' 'index.php' $anon
+Assert 'site root serves the landing page' ($root.Code -eq 200) "code=$($root.Code)"
+Assert 'landing page needs no sign-in' ($root.Location -notmatch 'login\.php')
+Assert 'landing page is not the dashboard' ($root.Body -notmatch 'Welcome back')
+
+$marketing = $root.Body
+Assert 'has a hero headline' ($marketing -match 'lp-h1')
+Assert 'offers Sign in' ($marketing -match 'auth/login\.php')
+Assert 'offers Get started' ($marketing -match 'href="#setup"')
+Assert 'has an about section' ($marketing -match 'id="about"')
+Assert 'has a setup section' ($marketing -match 'id="setup"')
+Assert 'has a skip link' ($marketing -match 'lp-skip')
+
+# style.css owns the brand tokens, so it has to load first.
+Assert 'landing page loads style.css before landing.css' (
+    $marketing.IndexOf('css/style.css') -lt $marketing.IndexOf('css/landing.css')
+)
+
+foreach ($t in @('features', 'preview', 'workflow', 'integrations', 'faq')) {
+    Assert "tab present: $t" (($marketing -match "id=`"tab-$t`"") -and ($marketing -match "id=`"panel-$t`""))
+}
+
+# CSP allows script-src 'self' only because nothing inline was added.
+Assert 'landing page has no inline event handlers' (-not ($marketing -match 'on(click|change|submit|load|input)='))
+Assert 'landing page has no inline script blocks' (-not ($marketing -match '<script>'))
+Assert 'landing page makes no off-origin requests' (-not ($marketing -match '(?:src|href)="https?://'))
+
+# A public page must not leak business data by being indexed or cached.
+Assert 'landing page renders no client records' (-not ($marketing -match 'Northwind|Bluepeak|Ironbridge'))
+Assert 'landing page renders no seeded passwords' (-not ($marketing -match 'admin123|staff123|\$2y\$'))
+Assert 'landing page does not claim an open-source licence' (-not ($marketing -match '(?i)ClientFlow.{0,40}(MIT|open.?source) licen'))
+Assert 'landing page admits the missing audit log' ($marketing -match 'audit log')
+Assert 'landing page admits CSV export is unbuilt' ($marketing -match 'no CSV export|Not built yet')
+
+# Screenshots must actually resolve, not fall back to the placeholder.
+foreach ($shot in @('dashboard', 'clients', 'client', 'pipeline', 'reports', 'recycle')) {
+    $r = Invoke-App 'GET' "assets/img/$shot.png" $anon
+    Assert "screenshot served: $shot.png" ($r.Code -eq 200 -and $r.Body.Length -gt 20000) "code=$($r.Code) len=$($r.Body.Length)"
+}
+
+# A signed-in visitor should be offered the dashboard, not a second sign-in.
+# Scoped to the nav/hero call to action: the Get started section keeps its
+# "Sign in" button on purpose, because that section explains how to sign in.
+$signedIn = Invoke-App 'GET' 'index.php' $admin
+Assert 'signed-in visitor is offered the dashboard' ($signedIn.Body -match 'Open dashboard')
+Assert 'signed-in nav swaps the sign-in button' (-not ($signedIn.Body -match 'btn-outline-secondary btn-sm'))
+Assert 'anonymous visitor gets the sign-in button' ((Invoke-App 'GET' 'index.php' $anon).Body -match 'btn-outline-secondary btn-sm')
+
+# The app itself must still be guarded now that it does not live at the root.
+$guestRoot = New-Object System.Net.CookieContainer
+$d = Invoke-App 'GET' 'dashboard.php' $guestRoot
+Assert 'dashboard.php redirects when signed out' ($d.Location -match 'login\.php') "location=$($d.Location)"
+
 # ---------------------------------------------------------------- 2. exposure
 
 Section 'Sensitive files are not web-accessible'
