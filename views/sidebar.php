@@ -19,7 +19,10 @@ $navItems = [
 if (is_admin()) {
     $binCount = $binCount ?? null;
     $navItems[] = ['divider' => 'Administration'];
-    $navItems[] = ['label' => 'Users', 'icon' => 'bi-person-gear-fill', 'file' => 'admin/users.php', 'key' => 'users'];
+    // bi-person-badge-fill, not bi-person-gear-fill: the latter does not exist
+    // in Bootstrap Icons, so it rendered as a blank gap with no error anywhere.
+    // tools\regression.ps1 checks every bi-* class against the vendored font.
+    $navItems[] = ['label' => 'Users', 'icon' => 'bi-person-badge-fill', 'file' => 'admin/users.php', 'key' => 'users'];
     $navItems[] = [
         'label' => 'Recycle bin',
         'icon'  => 'bi-trash3-fill',

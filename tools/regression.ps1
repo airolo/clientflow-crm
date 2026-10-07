@@ -20,8 +20,15 @@
 param(
     [string]$BaseUrl = 'http://localhost/clientflow',
     [string]$LogPath = 'C:\xampp\apache\logs\error.log',
-    [string]$DbName  = 'clientflow_crm'
+    [string]$DbName  = 'clientflow_crm',
+    # Source tree, for the checks that read files rather than the running app.
+    # Resolved in the body, not here: $PSScriptRoot is not yet populated when a
+    # param default is evaluated under PowerShell 5.1.
+    [string]$ProjectRoot = ''
 )
+
+# $PSScriptRoot is reliably set once the script body starts.
+if ($ProjectRoot -eq '') { $ProjectRoot = Split-Path -Parent $PSScriptRoot }
 
 $ErrorActionPreference = 'Continue'
 $script:Passed = 0
@@ -183,6 +190,57 @@ foreach ($asset in @(
     Assert "serves $($asset.p)" ($r.Code -eq 200 -and $r.Body.Length -ge $asset.min) "code=$($r.Code) len=$($r.Body.Length)"
 }
 Assert 'no CDN references' (-not ($probe.Body -match 'cdn\.jsdelivr|unpkg\.com|cdnjs'))
+
+# A Bootstrap Icon class that does not exist renders as an empty <i> - no error,
+# no warning, just a blank space. That is exactly how the sidebar's "Users" item
+# lost its icon without anything failing. So every bi-* class the app references
+# is checked against the vendored icon font.
+$iconCss = Get-Content (Join-Path $ProjectRoot 'assets\vendor\css\bootstrap-icons.min.css') -Raw
+
+# Strip comments first: a prose mention of a bad icon name (for instance the
+# note in views/sidebar.php recording this very regression) is documentation,
+# not usage, and must not fail the check.
+function Remove-Comments([string]$text) {
+    $text = [regex]::Replace($text, '(?s)/\*.*?\*/', ' ')          # /* ... */
+    $text = [regex]::Replace($text, '(?m)^\s*//.*$', ' ')           # // ...
+    $text = [regex]::Replace($text, '(?m)^\s*#(?!\!).*$', ' ')      # # ... (php)
+    $text = [regex]::Replace($text, '(?s)<!--.*?-->', ' ')          # <!-- ... -->
+    return $text
+}
+
+$iconClasses = Get-ChildItem $ProjectRoot -Recurse -Include *.php, *.js |
+    Where-Object { $_.FullName -notmatch '\\vendor\\' } |
+    ForEach-Object { Remove-Comments (Get-Content $_.FullName -Raw) } |
+    ForEach-Object { [regex]::Matches($_, 'bi-[a-z0-9-]+') } |
+    ForEach-Object { $_.Value } |
+    Sort-Object -Unique
+
+$missingIcons = @()
+foreach ($ic in $iconClasses) {
+    # Skip names that are only a prefix, built up by concatenation such as
+    # 'bi-caret-' . ($dir) . '-fill'; those are checked as their final values.
+    if ($ic -match '-$') { continue }
+    # Selectors are written as .bi-name::before or .bi-name,.bi-other{...}
+    if (-not [regex]::IsMatch($iconCss, '\.' + [regex]::Escape($ic) + '(?=::|[,\s{])')) {
+        $missingIcons += $ic
+    }
+}
+Assert 'every referenced icon exists in the vendored font' ($missingIcons.Count -eq 0) `
+    "missing: $($missingIcons -join ', ')"
+
+# The concatenated caret icons used by the sort links are resolved at runtime,
+# so check the values they actually produce.
+foreach ($caret in @('bi-caret-up-fill', 'bi-caret-down-fill')) {
+    Assert "$caret exists" ([regex]::IsMatch($iconCss, '\.' + [regex]::Escape($caret) + '(?=::|[,\s{])'))
+}
+
+# Guard the specific regression: the Users nav entry must carry a real icon.
+$sidebar = Get-Content (Join-Path $ProjectRoot 'views\sidebar.php') -Raw
+$usersIcon = [regex]::Match($sidebar, "'Users',\s*'icon'\s*=>\s*'([^']+)'").Groups[1].Value
+Assert 'sidebar Users entry has an icon' ($usersIcon -ne '') "icon='$usersIcon'"
+Assert 'sidebar Users icon is a real one' (
+    $usersIcon -ne '' -and [regex]::IsMatch($iconCss, '\.' + [regex]::Escape($usersIcon) + '(?=::|[,\s{])')
+) "icon='$usersIcon'"
 
 # ---------------------------------------------------------------- 2. exposure
 
