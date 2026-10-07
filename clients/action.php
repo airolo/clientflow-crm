@@ -20,7 +20,7 @@ $id     = (int) ($_POST['id'] ?? 0);
 $return  = post_str('return', 'clients/index.php');
 
 // Only allow redirects to our own pages.
-if (!in_array($return, ['clients/index.php', 'index.php'], true)) {
+if (!in_array($return, ['clients/index.php', 'dashboard.php'], true)) {
     $return = 'clients/index.php';
 }
 

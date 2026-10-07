@@ -88,7 +88,7 @@ $pageTitle    = $isEdit ? 'Edit task' : 'Add task';
 $pageHeading  = $isEdit ? 'Edit task' : 'Add task';
 $pageSubtitle = $isEdit ? $task['title'] : 'Schedule a follow-up or reminder';
 $activeNav    = 'tasks';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Tasks' => 'tasks/index.php', $isEdit ? 'Edit' : 'Add' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Tasks' => 'tasks/index.php', $isEdit ? 'Edit' : 'Add' => null];
 $pageActions = [[
     'label' => 'Back to tasks',
     'href' => 'tasks/index.php',

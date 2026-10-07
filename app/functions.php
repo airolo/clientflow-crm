@@ -83,7 +83,7 @@ function redirect(string $path): void
 /** Current page filename, used to mark the active sidebar link. */
 function current_page(): string
 {
-    return basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
+    return basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'dashboard.php'));
 }
 
 // ---------------------------------------------------------------------------

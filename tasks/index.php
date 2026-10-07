@@ -38,7 +38,7 @@ $pageHeading  = 'Tasks & follow-ups';
 $pageSubtitle = $total . ' task' . ($total === 1 ? '' : 's') . ' matching your filters'
     . ($overdueCount > 0 ? ' · ' . $overdueCount . ' overdue' : '');
 $activeNav    = 'tasks';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Tasks' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Tasks' => null];
 $pageActions = [
     ['label' => 'Add task', 'href' => 'tasks/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
 ];

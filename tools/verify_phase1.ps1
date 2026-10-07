@@ -64,7 +64,7 @@ Check "same page with a non-loopback Host hides demo creds" (-not ($remote.Conte
 Write-Output "`n=== 2. Forced password change ==="
 $ctx = New-Session
 $r = Post $ctx 'auth/login.php' @{ email = 'admin@clientflow.test'; password = 'admin123' }
-# login.php redirects to index.php, and index.php then bounces the flagged
+# login.php redirects to dashboard.php, and dashboard.php then bounces the flagged
 # account to change_password.php - so landing there IS the success path.
 Check "seeded admin sign-in succeeds and is held at change_password" ((LandedOn $r) -eq 'auth/change_password.php') "landed=$(LandedOn $r)"
 
@@ -148,7 +148,7 @@ Check "old password no longer works" ($rOld.Content -match 'do not match')
 
 $cNew = New-Session
 $rNew = Post $cNew 'auth/login.php' @{ email = 'priya@clientflow.test'; password = $newPass }
-Check "new password works" ((LandedOn $rNew) -eq 'index.php') "landed=$(LandedOn $rNew)"
+Check "new password works" ((LandedOn $rNew) -eq 'dashboard.php') "landed=$(LandedOn $rNew)"
 
 Write-Output "`n=== 7. Error page serves no CDN request ==="
 $errPage = Get-Content 'C:\Users\Bradley\ClientFlow\app\bootstrap.php' -Raw

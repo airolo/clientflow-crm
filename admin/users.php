@@ -34,7 +34,7 @@ $pageTitle    = 'Users';
 $pageHeading  = 'Users';
 $pageSubtitle = $total . ' account' . ($total === 1 ? '' : 's') . ' with access';
 $activeNav    = 'users';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Users' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Users' => null];
 $pageActions = [[
     'label' => 'Add user',
     'tag' => 'button',

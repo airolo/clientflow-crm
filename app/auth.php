@@ -179,7 +179,7 @@ function require_admin(): void
     require_login();
     if (!is_admin()) {
         flash('danger', 'That area is restricted to administrators.');
-        redirect('index.php');
+        redirect('dashboard.php');
     }
 }
 

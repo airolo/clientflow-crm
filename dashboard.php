@@ -179,7 +179,7 @@ require __DIR__ . '/views/header.php';
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="complete">
                                 <input type="hidden" name="id" value="<?= (int) $task['id'] ?>">
-                                <input type="hidden" name="return" value="index.php">
+                                <input type="hidden" name="return" value="dashboard.php">
                                 <button type="submit" class="btn btn-sm btn-light border" title="Mark complete">
                                     <i class="bi bi-check-lg"></i>
                                 </button>

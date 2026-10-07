@@ -32,7 +32,7 @@ $pageTitle   = 'Clients';
 $pageHeading = 'Clients';
 $pageSubtitle = $total . ' client account' . ($total === 1 ? '' : 's') . ' on file';
 $activeNav   = 'clients';
-$breadcrumbs = ['Dashboard' => 'index.php', 'Clients' => null];
+$breadcrumbs = ['Dashboard' => 'dashboard.php', 'Clients' => null];
 $pageActions = [
     ['label' => 'Add client', 'href' => 'clients/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
 ];

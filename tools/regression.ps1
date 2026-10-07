@@ -155,7 +155,7 @@ $adminLogin = Invoke-App 'POST' 'auth/login.php' $admin @{
     _token = (Get-Token 'auth/login.php' $admin)
     email = 'admin@clientflow.test'; password = 'admin123'
 }
-if ($adminLogin.Location -notmatch 'index\.php$') {
+if ($adminLogin.Location -notmatch 'dashboard\.php$') {
     Write-Output "ABORT: admin login failed (got '$($adminLogin.Location)')"
     exit 1
 }
@@ -256,7 +256,7 @@ foreach ($dir in @('config/', 'models/', 'includes/', '.vscode/', '.git/')) {
     Assert "no listing: /$dir" ($status -eq 403 -or $status -eq 404) "status=$status"
 }
 # The app itself must still be reachable.
-foreach ($open in @('index.php', 'auth/login.php', 'assets/css/style.css', 'assets/vendor/css/bootstrap.min.css')) {
+foreach ($open in @('dashboard.php', 'auth/login.php', 'assets/css/style.css', 'assets/vendor/css/bootstrap.min.css')) {
     $status = Get-Status $open
     Assert "still served: /$open" ($status -eq 200) "status=$status"
 }
@@ -264,10 +264,10 @@ foreach ($open in @('index.php', 'auth/login.php', 'assets/css/style.css', 'asse
 # ---------------------------------------------------------------- 3. auth
 
 Section 'Authentication'
-Assert 'admin reaches dashboard' ((Invoke-App 'GET' 'index.php' $admin).Code -eq 200)
-Assert 'staff blocked from /users' ((Invoke-App 'GET' 'admin/users.php' $staff).Location -match 'index\.php$')
-Assert 'staff nav hides Users' (-not ((Invoke-App 'GET' 'index.php' $staff).Body -match 'users\.php'))
-foreach ($page in @('index.php', 'clients/index.php', 'leads/index.php', 'pipeline/index.php', 'tasks/index.php',
+Assert 'admin reaches dashboard' ((Invoke-App 'GET' 'dashboard.php' $admin).Code -eq 200)
+Assert 'staff blocked from /users' ((Invoke-App 'GET' 'admin/users.php' $staff).Location -match 'dashboard\.php$')
+Assert 'staff nav hides Users' (-not ((Invoke-App 'GET' 'dashboard.php' $staff).Body -match 'users\.php'))
+foreach ($page in @('dashboard.php', 'clients/index.php', 'leads/index.php', 'pipeline/index.php', 'tasks/index.php',
                     'activities/index.php', 'reports/index.php', 'admin/users.php', 'auth/profile.php')) {
     $guest = New-Object System.Net.CookieContainer
     $r = Invoke-App 'GET' $page $guest
@@ -301,7 +301,7 @@ Invoke-App 'POST' 'auth/login.php' $forced @{
 } | Out-Null
 
 Assert 'flagged account lands on change_password' (
-    (Invoke-App 'GET' 'index.php' $forced).Location -match 'change_password\.php$')
+    (Invoke-App 'GET' 'dashboard.php' $forced).Location -match 'change_password\.php$')
 Assert 'flagged account held off the client list' (
     (Invoke-App 'GET' 'clients/index.php' $forced).Location -match 'change_password\.php$')
 Assert 'flagged account held off reports' (
@@ -322,10 +322,10 @@ $done = Invoke-App 'POST' 'auth/change_password.php' $forced @{
     _token = (Get-Token 'auth/change_password.php' $forced)
     current_password = 'staff123'; new_password = $newPw; confirm_password = $newPw
 }
-Assert 'successful change redirects away from change_password' ($done.Location -match 'index\.php$')
+Assert 'successful change redirects away from change_password' ($done.Location -match 'dashboard\.php$')
 Assert 'flag cleared in the database' (
     (Invoke-Sql "SELECT must_change_password FROM users WHERE email='forced@regression.test';") -eq '0')
-Assert 'dashboard now reachable' ((Invoke-App 'GET' 'index.php' $forced).Code -eq 200)
+Assert 'dashboard now reachable' ((Invoke-App 'GET' 'dashboard.php' $forced).Code -eq 200)
 
 $oldPw = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $oldPw @{
@@ -376,7 +376,7 @@ Assert 'successful sign-in is logged' (
 
 Section 'Every page renders without PHP errors (admin + staff)'
 $adminPages = @(
-    'index.php','clients/index.php','clients.php?page=2','clients.php?status=active','clients.php?status=inactive',
+    'dashboard.php','clients/index.php','clients.php?page=2','clients.php?status=active','clients.php?status=inactive',
     'clients.php?assigned_to=2','clients.php?sort=company&dir=desc','clients.php?sort=created&dir=asc',
     'clients.php?search=north','clients.php?search=zzzznope','clients.php?sort=BOGUS&dir=sideways',
     'client_view.php?id=1','client_view.php?id=8','client_view.php?id=12','client_view.php?id=999',
@@ -412,7 +412,7 @@ foreach ($page in $adminPages) {
           else { $r.Code -eq 200 -and $r.Body.Length -gt 3000 }
     Assert "admin $page" ($ok -and $errors.Count -eq 0) "code=$($r.Code) len=$($r.Body.Length) errs=$($errors.Count) $($errors -join ' | ')"
 }
-foreach ($page in @('index.php','clients/index.php','leads/index.php','pipeline/index.php','tasks/index.php',
+foreach ($page in @('dashboard.php','clients/index.php','leads/index.php','pipeline/index.php','tasks/index.php',
                     'activities/index.php','reports/index.php','auth/profile.php','client_view.php?id=1','lead_view.php?id=1')) {
     Clear-Log
     $r = Invoke-App 'GET' $page $staff
@@ -715,7 +715,7 @@ Assert 'recycle bin lists the deleted client' ($bin -match 'Regression SoftDelet
 Assert 'recycle bin shows who deleted it' ($bin -match 'Alex Morgan')
 Assert 'recycle bin counts the linked records' ($bin -match '3 attached records')
 
-Assert 'staff cannot open the recycle bin' ((Invoke-App 'GET' 'admin/recycle_bin.php' $staff).Location -match 'index\.php$')
+Assert 'staff cannot open the recycle bin' ((Invoke-App 'GET' 'admin/recycle_bin.php' $staff).Location -match 'dashboard\.php$')
 $t = Get-Token 'admin/users.php' $staff
 Invoke-App 'POST' 'admin/recycle_action.php' $staff @{
     _token = $t; action = 'restore'; type = 'client'; id = $cId

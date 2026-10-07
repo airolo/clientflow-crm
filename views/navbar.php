@@ -11,7 +11,7 @@ $currentUser = current_user();
             <i class="bi bi-list fs-3"></i>
         </button>
 
-        <a class="navbar-brand d-flex align-items-center gap-2 me-auto me-lg-0" href="<?= url('index.php') ?>">
+        <a class="navbar-brand d-flex align-items-center gap-2 me-auto me-lg-0" href="<?= url('dashboard.php') ?>">
             <span class="brand-mark"><i class="bi bi-diagram-3-fill"></i></span>
             <span class="fw-semibold"><?= e(APP_SHORT) ?></span>
         </a>

@@ -74,8 +74,8 @@ $pageSubtitle = $isEdit
     : 'Create a new client account';
 $activeNav   = 'clients';
 $breadcrumbs = $isEdit
-    ? ['Dashboard' => 'index.php', 'Clients' => 'clients/index.php', $client['company_name'] => 'client_view.php?id=' . $id, 'Edit' => null]
-    : ['Dashboard' => 'index.php', 'Clients' => 'clients/index.php', 'Add' => null];
+    ? ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', $client['company_name'] => 'client_view.php?id=' . $id, 'Edit' => null]
+    : ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', 'Add' => null];
 $pageActions = [[
     'label' => 'Back',
     'href' => $isEdit ? "client_view.php?id=$id" : 'clients/index.php',

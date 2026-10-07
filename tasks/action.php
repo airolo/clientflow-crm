@@ -21,7 +21,7 @@ $return = post_str('return', 'tasks/index.php');
 // Only our own pages are valid return targets. The client and lead detail
 // pages are derived from the task's own links, not from the task id - using
 // $id here would redirect to an unrelated record.
-$allowedReturns = ['tasks/index.php', 'index.php'];
+$allowedReturns = ['tasks/index.php', 'dashboard.php'];
 if ($taskRow = ($id > 0 ? task_find($id) : null)) {
     if ($taskRow['client_id']) {
         $allowedReturns[] = 'client_view.php?id=' . (int) $taskRow['client_id'];

@@ -126,7 +126,7 @@ $pageTitle    = $isEdit ? 'Edit deal' : 'Add deal';
 $pageHeading  = $isEdit ? 'Edit deal' : ($presetLeadId > 0 && !$isEdit ? 'Convert lead to deal' : 'Add deal');
 $pageSubtitle = $isEdit ? $deal['deal_title'] : 'Track an opportunity through the pipeline';
 $activeNav    = 'pipeline';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Pipeline' => 'pipeline/index.php', $isEdit ? 'Edit' : 'Add' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Pipeline' => 'pipeline/index.php', $isEdit ? 'Edit' : 'Add' => null];
 $pageActions = [[
     'label' => 'Back to pipeline',
     'href' => 'pipeline/index.php',

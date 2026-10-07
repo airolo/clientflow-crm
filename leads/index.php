@@ -34,7 +34,7 @@ $pageTitle    = 'Leads';
 $pageHeading  = 'Leads';
 $pageSubtitle = $total . ' lead' . ($total === 1 ? '' : 's') . ' matching your filters';
 $activeNav    = 'leads';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Leads' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Leads' => null];
 $pageActions = [
     ['label' => 'Add lead', 'href' => 'leads/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
 ];

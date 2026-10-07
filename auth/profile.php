@@ -84,7 +84,7 @@ $pageTitle    = 'My profile';
 $pageHeading  = 'My profile';
 $pageSubtitle = 'Update your details and password';
 $activeNav    = '';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Profile' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Profile' => null];
 
 require __DIR__ . '/../views/header.php';
 ?>

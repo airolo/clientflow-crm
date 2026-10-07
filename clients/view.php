@@ -32,7 +32,7 @@ $pageTitle   = $client['company_name'];
 $pageHeading = $client['company_name'];
 $pageSubtitle = $client['contact_person'] . ' · ' . ($client['email'] ?: 'no email on file');
 $activeNav   = 'clients';
-$breadcrumbs = ['Dashboard' => 'index.php', 'Clients' => 'clients/index.php', $client['company_name'] => null];
+$breadcrumbs = ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', $client['company_name'] => null];
 $pageActions = [
     ['label' => 'Log activity', 'href' => "activity_form.php?client_id=$id", 'icon' => 'bi-plus-lg'],
     ['label' => 'Add task', 'href' => "task_form.php?client_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],

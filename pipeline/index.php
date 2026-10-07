@@ -34,7 +34,7 @@ $pageTitle    = 'Pipeline';
 $pageHeading  = 'Sales pipeline';
 $pageSubtitle = $openCount . ' open deal' . ($openCount === 1 ? '' : 's') . ' worth ' . money($openValue);
 $activeNav    = 'pipeline';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Pipeline' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Pipeline' => null];
 $pageActions = [
     ['label' => 'Add deal', 'href' => 'pipeline/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
 ];

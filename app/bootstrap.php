@@ -48,7 +48,7 @@ set_exception_handler(function (Throwable $e): void {
         . '<p class="text-secondary">The request could not be completed and nothing was saved.</p>'
         . '<p class="small text-secondary">The details have been written to the Apache error log '
         . '(<code>logs/error.log</code> in your XAMPP folder).</p>'
-        . '<a href="' . e(url('index.php')) . '" class="btn btn-primary">Back to the dashboard</a>'
+        . '<a href="' . e(url('dashboard.php')) . '" class="btn btn-primary">Back to the dashboard</a>'
         . '</div></div></div></body></html>';
     exit;
 });

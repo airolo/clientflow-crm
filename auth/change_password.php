@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // next request is not sent straight back here.
         user_set_password($userId, $new, true);
         unset($_SESSION['must_change_password']);
-        flash_success('Your password has been changed.', 'index.php');
+        flash_success('Your password has been changed.', 'dashboard.php');
     }
 
     redirect_with_errors('auth/change_password.php', $errors, []);

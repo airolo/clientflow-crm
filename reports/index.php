@@ -30,7 +30,7 @@ $pageTitle    = 'Reports';
 $pageHeading  = 'Reports';
 $pageSubtitle = 'Sales performance, funnel health and team activity';
 $activeNav    = 'reports';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Reports' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Reports' => null];
 $pageActions = [[
     'label' => 'Print',
     'tag' => 'button',

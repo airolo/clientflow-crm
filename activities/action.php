@@ -18,7 +18,7 @@ $action = post_str('action');
 $id     = (int) ($_POST['id'] ?? 0);
 $return = post_str('return', 'activities/index.php');
 
-$allowedReturns = ['activities/index.php', 'index.php'];
+$allowedReturns = ['activities/index.php', 'dashboard.php'];
 if ($id > 0) {
     $activityRow = activity_find($id);
     if ($activityRow && $activityRow['client_id']) {

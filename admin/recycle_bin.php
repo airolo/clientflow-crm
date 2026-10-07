@@ -41,7 +41,7 @@ $pageSubtitle = $binTotal === 0
     ? 'Nothing has been deleted'
     : $binTotal . ' deleted ' . ($binTotal === 1 ? 'record' : 'records') . ' that can be restored';
 $activeNav    = 'users';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Recycle bin' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Recycle bin' => null];
 
 require __DIR__ . '/../views/header.php';
 ?>

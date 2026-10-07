@@ -30,7 +30,7 @@ $pageTitle    = $lead['lead_name'];
 $pageHeading  = $lead['lead_name'];
 $pageSubtitle = ($lead['company'] ?: 'No company') . ' · ' . pretty($lead['lead_source']) . ' · ' . money($lead['estimated_value']);
 $activeNav    = 'leads';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => null];
 $pageActions = [
     ['label' => 'Create deal', 'href' => "deal_form.php?lead_id=$id", 'icon' => 'bi-kanban'],
     ['label' => 'Add task', 'href' => "task_form.php?lead_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],

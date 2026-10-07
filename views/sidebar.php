@@ -4,7 +4,7 @@
  */
 
 $navItems = [
-    ['label' => 'Dashboard',  'icon' => 'bi-speedometer2',   'file' => 'index.php',    'key' => 'dashboard'],
+    ['label' => 'Dashboard',  'icon' => 'bi-speedometer2',   'file' => 'dashboard.php',    'key' => 'dashboard'],
     ['divider' => 'CRM'],
     ['label' => 'Clients',    'icon' => 'bi-people-fill',    'file' => 'clients/index.php',  'key' => 'clients'],
     ['label' => 'Leads',      'icon' => 'bi-funnel-fill',    'file' => 'leads/index.php',    'key' => 'leads'],

@@ -148,7 +148,7 @@ function render_row_actions(array $actions): void
  */
 function render_post_form_open(array $hidden = []): void
 {
-    $actionUrl = 'index.php';
+    $actionUrl = 'dashboard.php';
     foreach ($hidden as $name => $value) {
         if ($name === 'action_url') {
             $actionUrl = (string) $value;

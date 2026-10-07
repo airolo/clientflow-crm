@@ -38,7 +38,7 @@ $pageTitle    = 'Activities';
 $pageHeading  = 'Activities';
 $pageSubtitle = $total . ' interaction' . ($total === 1 ? '' : 's') . ' recorded';
 $activeNav    = 'activities';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Activities' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Activities' => null];
 $pageActions = [
     ['label' => 'Log activity', 'href' => 'activities/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
 ];

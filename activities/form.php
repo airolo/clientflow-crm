@@ -96,7 +96,7 @@ $pageTitle    = $isEdit ? 'Edit activity' : 'Log activity';
 $pageHeading  = $isEdit ? 'Edit activity' : 'Log activity';
 $pageSubtitle = $isEdit ? $activity['title'] : ($scopeLabel !== '' ? 'For ' . $scopeLabel : 'Record a client interaction');
 $activeNav    = 'activities';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Activities' => 'activities/index.php', $isEdit ? 'Edit' : 'New' => null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Activities' => 'activities/index.php', $isEdit ? 'Edit' : 'New' => null];
 $pageActions = [[
     'label' => 'Back to activity',
     'href' => 'activities/index.php',

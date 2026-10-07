@@ -70,8 +70,8 @@ $pageHeading = $isEdit ? 'Edit lead' : 'Add lead';
 $pageSubtitle = $isEdit ? $lead['lead_name'] : 'Capture a new prospect';
 $activeNav   = 'leads';
 $breadcrumbs = $isEdit
-    ? ['Dashboard' => 'index.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => 'lead_view.php?id=' . $id, 'Edit' => null]
-    : ['Dashboard' => 'index.php', 'Leads' => 'leads/index.php', 'Add' => null];
+    ? ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => 'lead_view.php?id=' . $id, 'Edit' => null]
+    : ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', 'Add' => null];
 $pageActions = [[
     'label' => 'Back',
     'href' => $isEdit ? "lead_view.php?id=$id" : 'leads/index.php',

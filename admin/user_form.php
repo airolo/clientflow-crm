@@ -107,7 +107,7 @@ $pageTitle    = $isEdit ? 'Edit user' : 'New user';
 $pageHeading  = $isEdit ? 'Edit user' : 'New user';
 $pageSubtitle = $isEdit ? $target['name'] : 'Create a login account';
 $activeNav    = 'users';
-$breadcrumbs  = ['Dashboard' => 'index.php', 'Users' => 'admin/users.php', $isEdit ? 'Edit' : null];
+$breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Users' => 'admin/users.php', $isEdit ? 'Edit' : null];
 $pageActions = [[
     'label' => 'Back to users',
     'href' => 'admin/users.php',

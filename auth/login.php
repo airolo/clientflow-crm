@@ -8,7 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/bootstrap.php';
 
 if (is_logged_in()) {
-    redirect('index.php');
+    redirect('dashboard.php');
 }
 
 $errors = take_errors();
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         $loginError = attempt_login($email, $password);
         if ($loginError === null) {
-            flash_success('Welcome back, ' . current_user()['name'] . '.', 'index.php');
+            flash_success('Welcome back, ' . current_user()['name'] . '.', 'dashboard.php');
         }
         $errors['password'] = $loginError;
     }
