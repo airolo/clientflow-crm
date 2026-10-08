@@ -291,8 +291,10 @@ ClientFlow/
 │   ├── export_test.ps1           # 53 checks for CSV export
 │   ├── import_test.ps1           # 62 checks for CSV import
 │   ├── signup_test.ps1           # 58 checks for signup and throttling
+│   ├── backup_test.ps1            # 56 checks for backup, restore and bundles
 │   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
+│   ├── restore.ps1               # the other half: restore one, with a safety copy first
 │   └── README.md
 │
 ├── migrations/                   # ALTER scripts for existing installs
@@ -925,9 +927,49 @@ The new owner is signed in through `sign_in_user()`, which `attempt_login()` als
 session shape is defined in one place rather than two.
 
 **Known limit: signup sends no email, so a workspace can be claimed with an address nobody
-controls.** This build has no mail, so there is no verification link to put in the email. The
+controls.** This build has no mail, so there is no verification link to put in one. The
 landing page says so rather than implying the address is confirmed. This is the first thing to add
 when mail is wired up.
+
+### Backups and restores
+
+Two different things, and confusing them is how people end up with neither:
+
+| | What it is | Restores into a running app? |
+|---|---|---|
+| `tools\backup.ps1` | A full `mysqldump` of the database | Yes, with `restore.ps1` |
+| Workspace bundle (`export.php?type=bundle`) | Five CSVs and a manifest, one workspace | No — it is a copy of your data, not a backup |
+
+**Back up** whenever you are about to change something irreversible:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\backup.ps1
+```
+
+Dumps land in `%LOCALAPPDATA%\ClientFlow\backups`, never inside the web root, and older than
+`-Keep` days (30 by default) are pruned afterwards.
+
+**Verify a dump** without touching anything — what you want for an offsite copy you cannot see:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File .\dump.sql -Verify
+```
+
+**Restore**, which takes a safety copy of the current database first and prints where it put it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File .\dump.sql
+```
+
+`-Force` is required to overwrite a database that already has tables in it. Restore refuses a file
+that is too small, is not a `mysqldump`, or does not end with the `Dump completed` marker — which is
+what an upload cut short looks like — and prints row counts per table afterwards so a restore that
+"worked" but lost most of the data is obvious.
+
+**Workspace bundles** let a single workspace take its own data with it: the five CSVs plus a
+manifest naming the workspace and its sign-in slug. The manifest says plainly that it cannot be
+restored into a running install — `import.php` reads the CSVs, and `restore.ps1` is what restores a
+database.
 
 ### Adding a model function
 

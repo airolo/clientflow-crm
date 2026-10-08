@@ -327,6 +327,56 @@ And one general trap: `Write-Output` inside a helper that callers assign the
 result of does not reach the console — it lands in their variable instead. Use
 `Write-Host` for tracing.
 
+## backup_test.ps1
+
+56 assertions covering backup, restore and the workspace bundle.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\backup_test.ps1
+```
+
+A backup that has never been restored is a guess, so this takes a real dump,
+restores it into a scratch database (`cf_phasee_restore`, dropped afterwards),
+and compares row counts table by table — all seven matching. The live database is
+never restored into.
+
+Also checked: every restore guard fires, the safety copy is itself restorable,
+and a bundle holds this workspace's rows and nothing from another workspace's.
+
+### Two bugs this found, both in tooling people rely on in a panic
+
+- **`backup.ps1` printed its restore command using the `mysqldump` binary.**
+  mysqldump *produces* dumps; it does not read them back. Run literally, the
+  printed command created zero tables. The instructions now name `mysql.exe`, say
+  why, and point at `restore.ps1`.
+- **`restore.ps1` wrote its safety copy with PowerShell's `>` redirection**,
+  which is UTF-16 in PowerShell 5.1 — a malformed copy of the database at exactly
+  the moment it is needed. It now uses `--result-file=` like `backup.ps1` does,
+  and the copy is checked for a dump header before the restore starts.
+
+And one in the bundle: `ZipArchive` reads its members when `close()` finalises
+the archive, so deleting the temp CSVs straight after `addFile()` left it with
+nothing to write. The bundle also had `ob_end_clean()` in its `finally`, which
+discarded the zip bytes it had just written — serving a correct
+`application/zip` response with a zero-byte body. The archive is now size-checked
+so this fails loudly instead of shipping an empty download.
+
+## restore.ps1
+
+The other half of `backup.ps1`. A safety copy is taken first and printed,
+the dump is inspected before it is applied, `-Force` is required to overwrite a
+database that has tables, and row counts are printed afterwards.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File .\dump.sql -Verify
+powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File .\dump.sql
+powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File .\dump.sql -Force
+```
+
+`-Verify` is the one to run against an offsite copy: it reports whether the dump
+looks loadable and touches no database at all.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in
