@@ -257,6 +257,36 @@ function lead_deals(int $leadId): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Every live deal, unpaginated, for CSV export.
+ *
+ * Client and lead names are resolved with tenant-scoped joins. A deal can point
+ * at a deleted client or lead, and the value still belongs in the export, so
+ * there is no `deleted_at IS NULL` on the joined tables - only on the deal
+ * itself. That is deliberate: dropping a deal from an export because its client
+ * was deleted would make the pipeline figures disagree with the board.
+ *
+ * @return Generator
+ */
+function deal_export_rows(): Generator
+{
+    $stmt = db()->prepare(
+        "SELECT d.deal_title, c.company_name AS client_name, l.lead_name,
+                d.stage, d.value, d.expected_close_date, u.name AS owner_name,
+                d.notes, d.created_at
+         FROM deals d
+         LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN leads   l ON l.id = d.lead_id AND l.tenant_id = d.tenant_id
+         LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.deleted_at IS NULL
+         ORDER BY d.created_at DESC, d.id DESC"
+    );
+    $stmt->execute([tenant_id()]);
+    while ($row = $stmt->fetch()) {
+        yield $row;
+    }
+}
+
 function deal_validate(array $data): array
 {
     $errors = [];

@@ -35,6 +35,9 @@ $activeNav   = 'clients';
 $breadcrumbs = ['Dashboard' => 'dashboard.php', 'Clients' => null];
 $pageActions = [
     ['label' => 'Add client', 'href' => 'clients/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+    // Exports every client in the workspace, not just the current page. Scoped
+    // to this workspace server-side; the ?type= here only chooses the columns.
+    ['label' => 'Export CSV', 'href' => 'export.php?type=client', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 
 require __DIR__ . '/../views/header.php';

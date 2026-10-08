@@ -37,6 +37,7 @@ $activeNav    = 'pipeline';
 $breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Pipeline' => null];
 $pageActions = [
     ['label' => 'Add deal', 'href' => 'pipeline/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+    ['label' => 'Export CSV', 'href' => 'export.php?type=deal', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 
 require __DIR__ . '/../views/header.php';

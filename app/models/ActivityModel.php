@@ -162,6 +162,29 @@ function activity_count(): int
     return (int) $stmt->fetchColumn();
 }
 
+/**
+ * Every live activity, unpaginated, for CSV export.
+ *
+ * @return Generator
+ */
+function activity_export_rows(): Generator
+{
+    $stmt = db()->prepare(
+        "SELECT a.type, a.title, a.details, c.company_name AS client_name,
+                l.lead_name, u.name AS owner_name, a.created_at
+         FROM activities a
+         LEFT JOIN clients c ON c.id = a.client_id AND c.tenant_id = a.tenant_id
+         LEFT JOIN leads   l ON l.id = a.lead_id AND l.tenant_id = a.tenant_id
+         LEFT JOIN users   u ON u.id = a.created_by AND u.tenant_id = a.tenant_id
+         WHERE a.tenant_id = ? AND a.deleted_at IS NULL
+         ORDER BY a.created_at DESC, a.id DESC"
+    );
+    $stmt->execute([tenant_id()]);
+    while ($row = $stmt->fetch()) {
+        yield $row;
+    }
+}
+
 function activity_validate(array $data): array
 {
     $errors = [];

@@ -218,6 +218,30 @@ function task_count_by_status(): array
 }
 
 /**
+ * Every live task, unpaginated, for CSV export.
+ *
+ * @return Generator
+ */
+function task_export_rows(): Generator
+{
+    $stmt = db()->prepare(
+        "SELECT t.title, t.description, c.company_name AS client_name,
+                l.lead_name, t.status, t.priority, t.due_date, t.completed_at,
+                u.name AS owner_name, t.created_at
+         FROM tasks t
+         LEFT JOIN clients c ON c.id = t.client_id AND c.tenant_id = t.tenant_id
+         LEFT JOIN leads   l ON l.id = t.lead_id AND l.tenant_id = t.tenant_id
+         LEFT JOIN users   u ON u.id = t.assigned_to AND u.tenant_id = t.tenant_id
+         WHERE t.tenant_id = ? AND t.deleted_at IS NULL
+         ORDER BY t.due_date IS NULL, t.due_date ASC, t.id ASC"
+    );
+    $stmt->execute([tenant_id()]);
+    while ($row = $stmt->fetch()) {
+        yield $row;
+    }
+}
+
+/**
  * Validate a task form. Returns an array of field => error message.
  */
 function task_validate(array $data): array

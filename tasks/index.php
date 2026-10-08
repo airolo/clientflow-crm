@@ -41,6 +41,7 @@ $activeNav    = 'tasks';
 $breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Tasks' => null];
 $pageActions = [
     ['label' => 'Add task', 'href' => 'tasks/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+    ['label' => 'Export CSV', 'href' => 'export.php?type=task', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 
 require __DIR__ . '/../views/header.php';

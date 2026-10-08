@@ -41,6 +41,7 @@ $activeNav    = 'activities';
 $breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Activities' => null];
 $pageActions = [
     ['label' => 'Log activity', 'href' => 'activities/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+    ['label' => 'Export CSV', 'href' => 'export.php?type=activity', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 
 require __DIR__ . '/../views/header.php';

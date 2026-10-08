@@ -166,6 +166,30 @@ function lead_count_by_source(): array
     return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
+/**
+ * Every live lead, unpaginated, for CSV export.
+ *
+ * A generator so a large workspace streams rather than being buffered. Deleted
+ * rows are excluded, matching the list screen.
+ *
+ * @return Generator
+ */
+function lead_export_rows(): Generator
+{
+    $stmt = db()->prepare(
+        "SELECT l.lead_name, l.company, l.email, l.phone, l.lead_source, l.status,
+                l.estimated_value, u.name AS owner_name, l.notes, l.created_at
+         FROM leads l
+         LEFT JOIN users u ON u.id = l.assigned_to AND u.tenant_id = l.tenant_id
+         WHERE l.tenant_id = ? AND l.deleted_at IS NULL
+         ORDER BY l.created_at DESC, l.id DESC"
+    );
+    $stmt->execute([tenant_id()]);
+    while ($row = $stmt->fetch()) {
+        yield $row;
+    }
+}
+
 /** Leads that have no deal yet, i.e. not yet on the pipeline. */
 function lead_unconverted(int $limit = 6): array
 {

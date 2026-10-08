@@ -59,7 +59,7 @@ function client_find(int $id): ?array
     return $stmt->fetch() ?: null;
 }
 
-/** All clients as id => label, for task dropdowns. */
+/** Every client in this workspace, as id => label, for task dropdowns. */
 function client_options(): array
 {
     $stmt = db()->prepare(
@@ -73,6 +73,39 @@ function client_options(): array
         $options[$row['id']] = $row['company_name'];
     }
     return $options;
+}
+
+/**
+ * Every live client, unpaginated, for CSV export.
+ *
+ * A generator rather than a returned array so a large workspace streams to the
+ * download instead of being held in memory twice - once as rows, once as the
+ * accumulated CSV. fetch() in a loop rather than fetchAll() for the same reason.
+ *
+ * Soft-deleted rows are excluded, matching what the list screen shows. Deleted
+ * records live in the recycle bin, and an export that silently included them
+ * would put records someone deliberately removed back into a file they were
+ * about to email to someone.
+ *
+ * The owner name is joined in and scoped on tenant_id because user ids are only
+ * unique per workspace.
+ *
+ * @return Generator
+ */
+function client_export_rows(): Generator
+{
+    $stmt = db()->prepare(
+        "SELECT c.company_name, c.contact_person, c.email, c.phone, c.address,
+                c.status, u.name AS owner_name, c.notes, c.created_at
+         FROM clients c
+         LEFT JOIN users u ON u.id = c.assigned_to AND u.tenant_id = c.tenant_id
+         WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+         ORDER BY c.company_name ASC, c.id ASC"
+    );
+    $stmt->execute([tenant_id()]);
+    while ($row = $stmt->fetch()) {
+        yield $row;
+    }
 }
 
 /** Create a client. */
