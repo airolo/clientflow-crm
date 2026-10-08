@@ -78,6 +78,24 @@ $value = static function (string $key, string $fallback = '') use ($old, $tenant
     return old_value($old, (array) $tenant, $key, $fallback);
 };
 
+// What time it is for this workspace right now.
+//
+// A timezone setting that changes nothing you can see is impossible to confirm,
+// which is its own kind of bug. require_active_tenant() has already applied the
+// workspace zone for this request, so date() here reflects the saved setting.
+// The UTC offset is shown as well as the clock, because the clock alone reads
+// the same in two zones that happen to be hours apart at certain times of day.
+$now        = new DateTimeImmutable('now');
+$offsetSec  = $now->getOffset();
+$offsetAbs  = abs($offsetSec);
+$offsetText = sprintf(
+    'UTC%s%02d:%02d',
+    $offsetSec < 0 ? '-' : '+',
+    intdiv($offsetAbs, 3600),
+    intdiv($offsetAbs % 3600, 60)
+);
+$clockNow = $now->format('H:i');
+
 $pageTitle    = 'Workspace settings';
 $pageHeading  = 'Workspace settings';
 $pageSubtitle = 'How this workspace is named and how money and dates are shown';
@@ -143,6 +161,11 @@ require __DIR__ . '/../views/header.php';
                         <div class="form-text">
                             Used for every date and time the app prints, and for anything due
                             "today".
+                        </div>
+                        <div class="form-text mt-1">
+                            <i class="bi bi-clock me-1"></i>Right now it is
+                            <strong><?= e($clockNow) ?> <?= e($now->format('T')) ?></strong>
+                            (<?= e($offsetText) ?>)
                         </div>
                         <?php if ($message = field_error($errors, 'timezone')): ?>
                             <div class="invalid-feedback d-block"><?= e($message) ?></div>

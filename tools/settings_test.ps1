@@ -153,6 +153,22 @@ try {
     Check "B's settings show USD selected"  ($pageB -match '<option value="USD"[^>]*selected')
     Check "B's settings show America/New_York selected" ($pageB -match '<option value="America/New_York"[^>]*selected')
 
+    # The dropdown only proves the row was read back. This proves the timezone is
+    # actually applied to the request: require_active_tenant() calls
+    # date_default_timezone_set(), and the settings page prints the offset that
+    # results. An earlier version of this test asserted only the dropdown and
+    # passed with the timezone call deleted, because the two look identical when
+    # the setting is stored but never used.
+    #
+    # The offset, not the clock: two zones can show the same HH:MM at some times
+    # of day, and the clock would make this assertion flaky rather than sharp.
+    Check 'A applies Europe/London (UTC+01:00 in summer, +00:00 in winter)' `
+          ($pageA -match 'UTC\+0[01]:00')
+    Check 'A does not apply New York time' ($pageA -notmatch 'UTC-0[45]:00')
+    Check 'B applies America/New_York (UTC-04:00 / -05:00)' `
+          ($pageB -match 'UTC-0[45]:00')
+    Check 'B does not apply London time' ($pageB -notmatch 'UTC\+0[01]:00')
+
     Section '2. The workspace URL is not editable'
     Check 'the slug is not an input field' ($pageA -notmatch 'name="slug"')
     Check 'the page explains why'          ($pageA -match 'cannot be changed here')
@@ -194,6 +210,11 @@ INSERT INTO $DbName.deals (tenant_id, deal_title, value, stage, created_by)
     Check 'A no longer prints pounds' ($dashA2 -notmatch [regex]::Escape($Gbp))
     $dashB2 = Get-Safe $b.Ctx 'dashboard.php'
     Check 'B still prints USD'       ($dashB2 -match '\$')
+
+    # The new timezone must be live immediately, not on the next sign-in.
+    $pageA2 = Get-Safe $a.Ctx 'admin/settings.php'
+    Check 'A applies Asia/Tokyo (+09:00) straight after saving' `
+          ($pageA2 -match 'UTC\+09:00')
 
     # -----------------------------------------------------------------------
     Section '5. Validation rejects values off the allowed lists'
