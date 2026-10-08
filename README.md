@@ -113,7 +113,7 @@ comparing its own location against the document root, so nothing needs reconfigu
 4. Leave **Character set of the file** as `utf-8` (the file sets `utf8mb4` itself)
 5. Click **Go** / **Import**
 
-The script creates the `clientflow_crm` database, all seven tables and the demo data. You should see
+The script creates the `clientflow_crm` database, all eight tables and the demo data. You should see
 `clientflow_crm` appear in the left sidebar.
 
 > The SQL file starts with `DROP TABLE IF EXISTS`, so re-importing resets the database to the demo
@@ -154,17 +154,23 @@ credentials are printed on it.
 
 ## Demo accounts
 
-| Role  | Email                   | Password    |
-|-------|-------------------------|-------------|
-| Admin | `admin@clientflow.test` | `admin123`  |
-| Staff | `sarah@clientflow.test` | `staff123`  |
-| Staff | `marcus@clientflow.test`| `staff123`  |
-| Staff | `priya@clientflow.test` | `staff123`  |
+Sign-in takes a **workspace** as well as an email address, because two businesses may legitimately
+both have an `admin@company.com` and their accounts are separate.
+
+| Workspace         | Role  | Email                    | Password    |
+|-------------------|-------|--------------------------|-------------|
+| `clientflow-demo` | Admin | `admin@clientflow.test`  | `admin123`  |
+| `clientflow-demo` | Staff | `sarah@clientflow.test`  | `staff123`  |
+| `clientflow-demo` | Staff | `marcus@clientflow.test` | `staff123`  |
+| `clientflow-demo` | Staff | `priya@clientflow.test`  | `staff123`  |
 
 **Each of these is flagged to force a password change on first sign-in.** Sign in with any of them
 and you go straight to a "choose a new password" screen; the rest of the app stays locked until
 that is done. That is deliberate — these passwords are published in `database.sql`, this README and
 the Git history, so they are not treated as a secret.
+
+If you signed in before this became multi-tenant, your existing rows were adopted by a workspace
+called `my-business` when you ran migration 003. Sign in with that slug.
 
 Sign in as the admin to see everything, then as Sarah to see the reduced permission set: the Users
 section disappears from the sidebar, and records belonging to other staff cannot be edited or
@@ -240,6 +246,7 @@ ClientFlow/
 ├── app/                          # never served over HTTP
 │   ├── bootstrap.php             #   the single entry point
 │   ├── auth.php                  #   sessions, login, guards
+│   ├── tenancy.php               #   which workspace this request belongs to
 │   ├── functions.php             #   escaping, CSRF, badges, pagination
 │   ├── list_page.php             #   shared list-page markup
 │   ├── config/
@@ -249,6 +256,7 @@ ClientFlow/
 │   │   ├── ListQuery.php         #       shared list-query builder
 │   │   ├── SoftDeleteModel.php   #       delete, restore, purge
 │   │   ├── LoginAttemptModel.php #       sign-in throttling + audit trail
+│   │   ├── TenantModel.php       #       workspaces
 │   │   ├── ClientModel.php
 │   │   ├── LeadModel.php
 │   │   ├── DealModel.php
@@ -275,12 +283,15 @@ ClientFlow/
 ├── tools/
 │   ├── regression.ps1            # 331-assertion end-to-end suite
 │   ├── verify_phase1.ps1         # 26 checks for the sign-in hardening
+│   ├── isolation_test.ps1        # 123 checks across two live workspaces
+│   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
 │
 ├── migrations/                   # ALTER scripts for existing installs
 │   ├── 001_login_hardening.sql
-│   └── 002_soft_delete.sql
+│   ├── 002_soft_delete.sql
+│   └── 003_multi_tenancy.sql
 │
 ├── .htaccess                     # access rules and legacy URL redirects
 ├── .gitignore  .gitattributes
@@ -319,31 +330,41 @@ header.
 
 ## Database schema
 
-Seven tables, all InnoDB, all `utf8mb4`, with foreign keys, indexes and automatic timestamps.
+Eight tables, all InnoDB, all `utf8mb4`, with foreign keys, indexes and automatic timestamps.
 
 ```
-users ──┬──< clients ──┬──< deals >──┬── leads
-        │              ├──< tasks     │
-        │              └──< activities┘
-        ├──< leads ────┬──< tasks
-        │              └──< activities
-        ├──< deals
-        └──< tasks, activities
+tenants ──┬──< users ──┬──< clients ──┬──< deals >──┬── leads
+          │            │              ├──< tasks     │
+          │            │              └──< activities┘
+          │            ├──< leads ────┬──< tasks
+          │            │              └──< activities
+          │            ├──< deals
+          │            └──< tasks, activities
+          └──< login_attempts (nullable)
 ```
 
 | Table | Purpose | Key columns |
 |---|---|---|
-| `users` | Login accounts and record ownership | unique `email`, `role` enum, `password_hash`, `is_active`, `must_change_password` |
-| `clients` | Customer accounts | `company_name`, `contact_person`, `status`, `assigned_to` → users, `deleted_at`, `deleted_by` |
-| `leads` | Early-stage prospects | `lead_source`, `status`, `estimated_value`, `assigned_to`, `deleted_at`, `deleted_by` |
-| `deals` | Pipeline opportunities | `stage`, `value`, `client_id`, `lead_id`, `expected_close_date`, `deleted_at`, `deleted_by` |
-| `tasks` | Follow-ups | `due_date`, `priority`, `status`, optional `client_id` / `lead_id`, `completed_at`, `deleted_at`, `deleted_by` |
-| `activities` | Interaction history | `type`, `title`, `details`, optional `client_id` / `lead_id`, `created_by`, `deleted_at`, `deleted_by` |
-
-A seventh table, `login_attempts`, records every sign-in attempt so failures can be throttled and
-examined afterwards. It is not part of the CRM data model — see *Sign-in hardening*.
+| `tenants` | One row per business using the CRM | unique `slug`, `plan`, `status`, `currency`, `timezone` |
+| `users` | Login accounts and record ownership | `tenant_id` → tenants, unique per tenant on `email`, `role` enum, `password_hash`, `is_active`, `must_change_password` |
+| `clients` | Customer accounts | `tenant_id`, `company_name`, `contact_person`, `status`, `assigned_to` → users, `deleted_at`, `deleted_by` |
+| `leads` | Early-stage prospects | `tenant_id`, `lead_source`, `status`, `estimated_value`, `assigned_to`, `deleted_at`, `deleted_by` |
+| `deals` | Pipeline opportunities | `tenant_id`, `stage`, `value`, `client_id`, `lead_id`, `expected_close_date`, `deleted_at`, `deleted_by` |
+| `tasks` | Follow-ups | `tenant_id`, `due_date`, `priority`, `status`, optional `client_id` / `lead_id`, `completed_at`, `deleted_at`, `deleted_by` |
+| `activities` | Interaction history | `tenant_id`, `type`, `title`, `details`, optional `client_id` / `lead_id`, `created_by`, `deleted_at`, `deleted_by` |
+| `login_attempts` | Every sign-in attempt, for throttling | `tenant_id` (nullable), `email`, `ip`, `succeeded` |
 
 Design notes:
+
+- **Every record table carries `tenant_id`.** The id is read from the session and nowhere else —
+  never a URL, form field or hidden input — and every query filters on it. `tenant_id()` throws
+  rather than returning 0, because `WHERE tenant_id = 0` matches nothing and an empty page is much
+  harder to notice than an error. `tools/check_tenancy.ps1` enforces this mechanically and
+  `tools/isolation_test.ps1` proves it against two live workspaces. See *Workspaces*.
+- `users` is unique on `(tenant_id, email)`, not on `email` globally. That is what lets two
+  businesses both have an `admin@company.com`.
+- `login_attempts.tenant_id` is nullable and deliberately has no foreign key: failures against an
+  unknown workspace are still recorded, with `tenant_id` left null.
 
 - `leads` and `clients` are separate. A lead is an unqualified prospect; a client is an account you
   already trade with.
@@ -705,6 +726,38 @@ Two further guards, both added after they were found to be missing:
 `tools/verify_phase1.ps1` covers the sign-in hardening workstream on its own (26 checks) and is
 handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`.
 
+### The two tenant tools
+
+Neither of the other suites can catch a missing tenant filter. With one workspace every page renders
+correctly whether or not the query is scoped, so 331 passing assertions say nothing about isolation.
+
+```powershell
+# Static: resolve each statement's base table, require the predicate on its own alias.
+powershell -ExecutionPolicy Bypass -File tools\check_tenancy.ps1
+
+# Behavioural: two real workspaces, 123 assertions, self-cleaning.
+powershell -ExecutionPolicy Bypass -File tools\isolation_test.ps1
+```
+
+`check_tenancy.ps1` needs no running site and no database. `isolation_test.ps1` drives the running
+site and creates its own throwaway workspaces, which it removes afterwards.
+
+Both were verified by deliberately breaking the code, because a check that cannot fail is worse
+than no check. Doing that turned up three things worth knowing:
+
+- Deleting a `'tenant'` key does not leak. `list_query`'s default alias is `t`, so a query aliased `c`
+  gets an unknown-column error and a 500. It fails closed — which is why `isolation_test.ps1`
+  treats an erroring page as a failure rather than as "no marker found".
+- Interpolated table names (`SoftDeleteModel`'s `UPDATE {$meta['table']}`) were invisible to the
+  static checker, which needed a literal word after the SQL keyword. That was the one file where
+  blindness cost the most.
+- The isolation test leaked its own sign-in attempts, which eventually tripped the deliberately
+  global per-IP limit and locked the test itself out.
+
+`isolation_test.ps1` covers data access, not the admin-management guard: making `user_admin_count()`
+global again does not fail it, because no section demotes an admin across workspaces. The static
+check is what covers that one.
+
 ---
 
 ## Migrations
@@ -716,8 +769,64 @@ from `migrations/`, imported in order through phpMyAdmin:
 |-------------------------------|-----------------------------------------------------|
 | `001_login_hardening.sql`     | `users.must_change_password`, `login_attempts`      |
 | `002_soft_delete.sql`         | `deleted_at` / `deleted_by` on the five record tables |
+| `003_multi_tenancy.sql`       | `tenants`, `tenant_id` on every record table, per-tenant email uniqueness |
 
 Each file is idempotent — running it twice is a no-op — and none of them drop data.
+
+> Run `003_multi_tenancy.sql` **before** deploying the multi-tenant code. The application filters
+> every query on `tenant_id` and will error without the column. It adopts your existing rows into a
+> single workspace called `my-business`, so nothing needs re-entering.
+
+---
+
+## Workspaces
+
+ClientFlow is multi-tenant. One deployment serves many businesses, and each sees only its own
+records.
+
+Every table that holds CRM data carries a `tenant_id`, and the value comes from one place:
+`app/tenancy.php` reads it from the session. **No page may take a tenant id from a URL, a form
+field or a hidden input.** A page that accepted `?tenant_id=` would be one forgotten parameter away
+from showing a stranger's customers, which is the whole risk the design exists to remove.
+
+Sign-in is workspace slug plus email. `attempt_login()` resolves the workspace first, then looks up
+the user *within* it. An unknown workspace produces exactly the same message as a wrong password, so
+the form cannot be used to discover which slugs exist.
+
+Two guards exist because one is not enough:
+
+- `tools/check_tenancy.ps1` resolves each statement's base table and requires the tenant predicate on
+  that table's own alias in the outer `WHERE`. Scoping a `JOIN` and scoping the base table are
+  different things, and only the second filters rows.
+- `tools/isolation_test.ps1` creates two real workspaces, signs in to each, and asserts neither can
+  read or write the other's data — including the case where every list looks correct but the writes
+  address rows by bare `id`.
+
+Sign-in throttling is keyed on `(tenant_id, email)`, so one workspace's failed guesses cannot lock
+out another workspace's account with the same address. The per-IP limit stays global on purpose, to
+stop a distributed run of guesses.
+
+### Adding a model function
+
+Every query against a tenant-scoped table needs the filter. Two shapes:
+
+```php
+// Explicit: normalise it, because a missing predicate leaks another tenant's rows.
+$stmt = db()->prepare('SELECT * FROM clients WHERE tenant_id = ? AND id = ?');
+$stmt->execute([tenant_id(), $id]);
+
+// Or route through list_query, declaring which alias to filter on.
+return list_query([
+    'from'   => 'FROM clients c ...',
+    'soft_delete' => ['c'],
+    'tenant'      => ['c'],   // must match the alias in 'from'
+]);
+```
+
+Then run `tools/check_tenancy.ps1`. It fails if the predicate is missing — including the case where
+you delete the `'tenant'` key entirely, which makes the builder's default alias (`t`) apply to a
+query aliased something else. That produces an unknown-column error rather than a leak: it fails
+closed.
 
 ---
 

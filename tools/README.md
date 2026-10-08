@@ -64,6 +64,77 @@ powershell -ExecutionPolicy Bypass -File tools\verify_phase1.ps1
 
 It restores the seeded demo state when it finishes.
 
+## check_tenancy.ps1
+
+Static check that no SQL statement reads or writes a tenant-scoped table without
+a tenant predicate on that table's own alias.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\check_tenancy.ps1
+```
+
+No running site and no database needed — this is source analysis, so it is the
+cheapest of the four and the one to run before every commit.
+
+For each statement it resolves the base table (`FROM` / `INSERT INTO` / `UPDATE`
+/ `DELETE FROM`), works out that table's alias, and requires the predicate in the
+outer `WHERE`. Matching on the alias specifically is the point: an earlier
+version tested "does the statement mention `tenant_id` anywhere" and it passed a
+genuinely leaky query, because `client_find()` had both its `LEFT JOIN`s scoped
+while its `WHERE` was wide open. Scoping a join and scoping the base table are
+different things, and only the second filters rows.
+
+It takes the **last** `WHERE` as the outer one, since a subquery in the select
+list appears before `FROM` and would otherwise be mistaken for it.
+
+Statements built with an interpolated table name (`SoftDeleteModel`'s
+`UPDATE {$meta['table']}`) are recognised too. They were invisible to an earlier
+version, which needed a literal word after the SQL keyword — and that was the one
+file where blindness would have cost the most, since it restores and permanently
+purges rows by bare `id`.
+
+`list_query()` callers are judged on declaring which alias to filter under a
+`'tenant'` key. Deleting that key does not leak: the builder's default alias is
+`t`, so a query aliased `c` gets an unknown-column error and a 500. It fails
+closed, which is the desired outcome — but it means the check is worth keeping,
+because it catches the mistake at commit time instead of at runtime.
+
+## isolation_test.ps1
+
+123 assertions across two real workspaces. This is the only check that can prove
+one business cannot see another's data: with a single workspace every page
+renders correctly whether or not a query is scoped, so `regression.ps1` passing
+331 assertions says nothing about isolation.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\isolation_test.ps1
+```
+
+It creates two throwaway workspaces, signs in to each in its own browser session,
+and asserts that neither can reach the other's records — listings, detail pages
+reached by walking `?id=`, and writes. The writes matter most: delete, restore,
+purge and edit all address rows by a bare `id` from the query string, so every
+list can look correctly filtered while those still destroy another workspace's
+data.
+
+Also covered: the same email address existing in two workspaces, a suspended
+workspace being signed out, throttling not crossing workspaces, and an unknown
+workspace producing the same message as a wrong password.
+
+Everything is removed afterwards. Two details worth keeping:
+
+- A page that returns **500 counts as a failure**, not as "no marker found". A
+  hard error that reads as a passing absence check is worse than no check.
+- Cleanup deletes `login_attempts` by email pattern rather than joining through
+  `tenants`. Attempts against an unknown workspace are stored with a null
+  `tenant_id` on purpose, so a tenant-join sweep misses them; they accumulated
+  until the deliberately global per-IP limit locked the test itself out.
+
+Known gap: this covers data access, not the admin-management guard. Making
+`user_admin_count()` global again does not fail here, because no section demotes
+an admin across workspaces. `check_tenancy.ps1` is what covers that one.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in
