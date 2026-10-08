@@ -18,6 +18,7 @@ DROP TABLE IF EXISTS `deals`;
 DROP TABLE IF EXISTS `leads`;
 DROP TABLE IF EXISTS `clients`;
 DROP TABLE IF EXISTS `login_attempts`;
+DROP TABLE IF EXISTS `signup_attempts`;
 DROP TABLE IF EXISTS `tenants`;
 DROP TABLE IF EXISTS `users`;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -45,6 +46,9 @@ CREATE TABLE `tenants` (
   `timezone`   VARCHAR(64) NOT NULL DEFAULT 'Europe/London',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- NULL until the owner finishes the first-run welcome screen. Stored here
+  -- rather than in the session so it does not reappear on another device.
+  `onboarded_at` TIMESTAMP NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tenants_slug` (`slug`),
   KEY `idx_tenants_status` (`status`)
@@ -104,6 +108,28 @@ CREATE TABLE `login_attempts` (
     KEY `idx_attempts_ip_time`    (`ip`, `attempted_at`),
     KEY `idx_attempts_time`       (`attempted_at`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =============================================================
+-- signup_attempts  - throttling for the public create-workspace form
+-- =============================================================
+-- Signup is the only endpoint reachable with no session, so it is the one worth
+-- limiting: to stop junk workspaces accumulating, and to slow any attempt to
+-- grind through passwords. A row per attempt; the successful ones double as a
+-- record of which addresses have claimed a workspace.
+--
+-- No tenant_id: attempts are recorded before a workspace exists.
+CREATE TABLE `signup_attempts` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ip`           VARCHAR(45) NOT NULL,
+  `email`        VARCHAR(150) NOT NULL,
+  `succeeded`    TINYINT(1) NOT NULL DEFAULT 0,
+  `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_signup_email_time` (`email`, `attempted_at`),
+  KEY `idx_signup_ip_time`    (`ip`, `attempted_at`),
+  KEY `idx_signup_time`       (`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- =============================================================

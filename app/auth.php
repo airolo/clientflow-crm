@@ -70,6 +70,40 @@ function is_admin(): bool
 }
 
 /**
+ * Put a verified user into the session.
+ *
+ * Shared by sign-in and by signup, so the session shape lives in one place. Both
+ * callers must have already established that the password is correct - this
+ * function does no checking of its own, and takes the row it was handed rather
+ * than re-reading it.
+ *
+ * The tenant id is a required argument rather than read from the user row's
+ * nullable columns, because it is the one value that decides what every later
+ * query in the request can see.
+ */
+function sign_in_user(array $user, int $tenantId): void
+{
+    // New session id on privilege change (session fixation protection).
+    session_regenerate_id(true);
+
+    $_SESSION['user'] = [
+        'id'    => (int) $user['id'],
+        'name'  => $user['name'],
+        'email' => $user['email'],
+        'role'  => $user['role'],
+    ];
+    // Every query filters on this. Taken from the row we just verified, never
+    // from the request.
+    $_SESSION['tenant_id'] = $tenantId;
+    tenant_cache_reset();
+    // Carried from the database rather than trusted from the form, so the
+    // forced-change redirect cannot be bypassed by posting a different value.
+    $_SESSION['must_change_password'] = (int) ($user['must_change_password'] ?? 0) === 1;
+    $_SESSION['_created_at'] = time();
+    $_SESSION['_last_activity'] = time();
+}
+
+/**
  * Attempt a login. Returns an error string on failure, or null on success.
  *
  * Takes the workspace slug as well as the email, because two businesses may
@@ -124,24 +158,7 @@ function attempt_login(string $tenantSlug, string $email, string $password): ?st
     login_attempt_record($tenantId, $email, true);
     login_attempt_clear($tenantId, $email);
 
-    // New session id on privilege change (session fixation protection).
-    session_regenerate_id(true);
-
-    $_SESSION['user'] = [
-        'id'    => (int) $user['id'],
-        'name'  => $user['name'],
-        'email' => $user['email'],
-        'role'  => $user['role'],
-    ];
-    // Every query filters on this. Set from the row we just verified, never
-    // from the form, so it cannot be pointed at another workspace.
-    $_SESSION['tenant_id'] = (int) $tenant['id'];
-    tenant_cache_reset();
-    // Carried from the database rather than trusted from the form, so the
-    // forced-change redirect cannot be bypassed by posting a different value.
-    $_SESSION['must_change_password'] = (int) ($user['must_change_password'] ?? 0) === 1;
-    $_SESSION['_created_at'] = time();
-    $_SESSION['_last_activity'] = time();
+    sign_in_user($user, (int) $tenant['id']);
 
     return null;
 }

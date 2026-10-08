@@ -121,6 +121,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
 
+        <p class="text-center text-secondary small mt-3 mb-0">
+            No workspace yet? <a href="<?= e(url('signup.php')) ?>">Create one</a>
+        </p>
+
 <?php if (DEMO_MODE): ?>
         <div class="demo-cred mt-4">
             <div class="fw-semibold mb-2"><i class="bi bi-info-circle me-1"></i>Demo accounts</div>

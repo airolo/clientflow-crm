@@ -112,11 +112,12 @@ $stackShips = [
     'Bootstrap 5'  => 'Vendored under assets/vendor, so nothing is fetched from a CDN',
     'Bootstrap Icons' => 'Also vendored, fonts included',
     'Vanilla JS'   => 'One small file, no jQuery, no build step',
+    'CSV import and export' => 'Export on every list screen; import shows exactly what would change before it saves anything',
 ];
 
 $stackPlanned = [
-    'CSV import and export' => 'No export button in the app yet - tools/backup.ps1 produces a mysqldump instead',
     'Sending email'        => 'Activities can record a call or email that happened, but nothing is sent from the app',
+    'Email verification'   => 'A workspace can be created against any address, because signup sends no mail yet',
     'File attachments'     => 'Not built',
     'REST API'             => 'No public API, so nothing can call into this from another tool',
     'Webhooks'             => 'Not built',
@@ -127,7 +128,11 @@ $stackPlanned = [
 $faq = [
     [
         'q' => 'Can I export my data?',
-        'a' => 'Not from inside the app - there is no CSV export. What there is is <code>tools/backup.ps1</code>, which dumps the database to a timestamped file and refuses to write inside the web root. For anything beyond a nightly dump you would want a real export, and it is not built yet.',
+        'a' => 'Yes - every list screen has an export button, for clients, leads, deals, tasks and activities. The file is scoped to your workspace only, and it is your whole workspace, not just the page you were looking at. There is also <code>tools/backup.ps1</code>, which dumps the whole database to a timestamped file and refuses to write inside the web root.',
+    ],
+    [
+        'q' => 'Can I bring my data in from a spreadsheet?',
+        'a' => 'Yes. Upload a CSV and you get a review screen first: how many rows will be created, which look like records you already have, and exactly what is wrong with each row that failed. Nothing is saved until you confirm. Column headings are matched loosely, so <code>Company Name</code> and <code>company_name</code> both work, and a file exported from here comes straight back in.',
     ],
     [
         'q' => 'Does it send email or integrate with my inbox?',
@@ -206,7 +211,8 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                 </a>
             <?php else: ?>
                 <a class="btn btn-outline-secondary btn-sm px-3" href="<?= e(url('auth/login.php')) ?>">Sign in</a>
-                <a class="btn btn-primary btn-sm px-3 d-none d-sm-inline-block" href="#setup">Get started</a>
+                <a class="btn btn-primary btn-sm px-3" href="<?= e(url('signup.php')) ?>">Create workspace</a>
+                <a class="btn btn-outline-secondary btn-sm px-3 d-none d-sm-inline-block" href="#setup">Get started</a>
             <?php endif; ?>
         </div>
     </div>
@@ -237,7 +243,10 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                             <i class="bi bi-speedometer2 me-2"></i>Open the dashboard
                         </a>
                     <?php else: ?>
-                        <a class="btn btn-primary btn-lg px-4" href="<?= e(url('auth/login.php')) ?>">
+                        <a class="btn btn-primary btn-lg px-4" href="<?= e(url('signup.php')) ?>">
+                            <i class="bi bi-building-add me-2"></i>Create a workspace
+                        </a>
+                        <a class="btn btn-outline-secondary btn-lg px-4" href="<?= e(url('auth/login.php')) ?>">
                             <i class="bi bi-box-arrow-in-right me-2"></i>Sign in
                         </a>
                         <a class="btn btn-outline-secondary btn-lg px-4" href="#setup">Get started</a>
@@ -604,6 +613,8 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                         <a href="<?= e(url('index.php')) ?>">Home</a>
                     <?php else: ?>
                         <a href="<?= e(url('auth/login.php')) ?>">Sign in</a>
+                        &nbsp;&middot;&nbsp;
+                        <a href="<?= e(url('signup.php')) ?>">Create a workspace</a>
                         &nbsp;&middot;&nbsp;
                         <a href="<?= e(url('index.php')) ?>">Home</a>
                     <?php endif; ?>

@@ -391,7 +391,12 @@ Assert 'landing page renders no client records' (-not ($marketing -match 'Northw
 Assert 'landing page renders no seeded passwords' (-not ($marketing -match 'admin123|staff123|\$2y\$'))
 Assert 'landing page does not claim an open-source licence' (-not ($marketing -match '(?i)ClientFlow.{0,40}(MIT|open.?source) licen'))
 Assert 'landing page admits the missing audit log' ($marketing -match 'audit log')
-Assert 'landing page admits CSV export is unbuilt' ($marketing -match 'no CSV export|Not built yet')
+# CSV import and export now exist, so the landing page must no longer claim they
+# are unbuilt. Asserting the absence of a stale claim, because the old assertion
+# here was "admits CSV export is unbuilt" and it kept passing while the page was
+# simply wrong.
+Assert 'landing page no longer claims CSV export is missing' (-not ($marketing -match 'no CSV export|Not built yet.*CSV|CSV import and export.*No export button'))
+Assert 'landing page offers workspace signup' ($marketing -match 'signup\.php')
 
 # Screenshots must actually resolve, not fall back to the placeholder.
 foreach ($shot in @('dashboard', 'clients', 'client', 'pipeline', 'reports', 'recycle')) {
