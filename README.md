@@ -286,6 +286,7 @@ ClientFlow/
 │   ├── verify_phase1.ps1         # 26 checks for the sign-in hardening
 │   ├── isolation_test.ps1        # 123 checks across two live workspaces
 │   ├── settings_test.ps1         # 43 checks for per-workspace settings
+│   ├── export_test.ps1           # 53 checks for CSV export
 │   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -832,6 +833,32 @@ Two deliberate choices worth knowing:
 
 The workspace slug is not editable. People sign in with it, so changing it would lock them out until
 you told them the new one.
+
+### CSV export
+
+`export.php?type=client|lead|deal|task|activity`, with a button on each list screen. The filename
+carries the workspace slug, because someone exporting from three customer sites otherwise ends up
+with `clients.csv` three times over.
+
+Exports are **not** built with `list_query()`, which caps a page at 100 rows. A silently truncated
+export is worse than no export at all, because nobody checks the row count of a file they asked to
+be whole. Each model has its own unpaginated, still tenant-scoped row generator, and it streams
+rather than buffering the whole file in memory.
+
+Two decisions worth knowing:
+
+- **Formula injection is neutralised.** A cell starting with `=`, `+`, `-` or `@` is prefixed with an
+  apostrophe, which Excel and LibreOffice read as "this is text". Company names are typed by sales
+  staff and end up in a file someone opens in Excel, so this is attacker-influenced data. The check
+  trims first, because Excel ignores leading whitespace before deciding a cell is a formula — so
+  ` =1+1` is just as dangerous as `=1+1`.
+- **Soft-deleted rows are excluded**, matching the list screen. A file about to be emailed to
+  someone should not contain records someone deliberately removed. Deals *are* still exported when
+  their client has been deleted, or the pipeline totals in the file would disagree with the board.
+
+Staff can export. The list screens already show staff every email and phone in the workspace, so an
+export grants nothing they could not read by paging through it; restricting it would be inconsistent.
+If you want exports to be narrower than the list, `export.php` is the single place to change.
 
 ### Adding a model function
 

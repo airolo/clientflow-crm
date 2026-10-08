@@ -182,6 +182,55 @@ literally. PowerShell 5.1 reads a `.ps1` without a BOM as ANSI, so a literal
 pound or euro sign in the source is a parse error — the script will not compile
 at all. No file in this folder carries non-ASCII bytes.
 
+## export_test.ps1
+
+53 assertions over the five CSV exports.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\export_test.ps1
+```
+
+`isolation_test.ps1` covers record access through pages; this covers the export
+path, which has its own queries and so is a separate place for a tenant filter to
+go missing. It also covers the risk nothing else does: **formula injection**.
+A company name typed by sales staff ends up in a file someone opens in Excel,
+and a cell starting with `=` is a live formula.
+
+Checked: the download headers, the workspace-scoped filename, completeness
+(37 rows, past the 100-row page cap), commas and quotes and newlines not
+shifting every later column, formula neutralisation including the padded-`=`
+case, soft-deleted rows staying out, per-workspace scoping on all five types,
+and bad or missing types being refused.
+
+Verified by breaking it on purpose: removing the formula guard fails 4
+assertions, and dropping `tenant_id` from `client_export_rows()` fails 4 here
+and is also caught by `check_tenancy.ps1`.
+
+### Two traps when building fixtures with awkward characters
+
+Both of these produced a test that confidently reported the *app* losing
+characters, when the characters had never reached the database:
+
+- **A double quote inside a string passed to `mysql.exe --execute` is eaten by
+  Windows argument parsing.** The fixture arrives without its quotes, and the
+  export then appears to strip them. Build such values in SQL with `CHAR(34)`
+  instead. Confirmed by inserting the same literal both ways and comparing
+  `HEX()`: the `--execute` route produced `The Big Client`, the `CHAR(34)`
+  route produced `The "Big" Client`.
+- **`||` is logical OR in MySQL, not string concatenation**, unless
+  `PIPES_AS_CONCAT` is set. Joining SQL fragments with `||` yields the number
+  0 rather than the intended text, silently.
+
+### One thing this suite cannot catch
+
+`export.php` used to end with a `while (ob_get_level()) { ob_end_clean(); }`
+loop. In that file it is a no-op, because `csv_send_headers()` has already
+cleared the buffers — a probe page with the same loop but no earlier one
+discarded an entire response body. It was removed rather than tested for,
+because a no-op has no observable behaviour to assert on. Defence is removal,
+not a regression test.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in
