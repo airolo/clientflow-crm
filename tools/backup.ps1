@@ -4,9 +4,12 @@
         Dump the ClientFlow database to a timestamped SQL file.
 
     .DESCRIPTION
-        There is no export button in the app, and database.sql starts with DROP
+        database.sql starts with DROP
         TABLE - so re-importing it wipes everything. This is the safety net:
         run it before any risky change, and before you re-import.
+
+        The in-app exports give you your records back, but they are not a
+        backup: they cannot help if the database itself is what went wrong.
 
         Backups land OUTSIDE htdocs by default, so a .sql file can never be
         served over HTTP, and outside the repository so a backup is never

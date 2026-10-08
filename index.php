@@ -7,11 +7,19 @@
  * require_login(): a visitor who has never heard of ClientFlow should see what
  * it is before being asked to log in.
  *
- * Two rules keep it honest:
+ * Audience: someone deciding whether to put their customer list into this. The
+ * copy is therefore written for a business owner rather than for a developer -
+ * what you get, and what happens to your data - rather than which columns the
+ * schema has. The implementation still gets described, but further down and
+ * because it earns its place, not as the headline.
+ *
+ * Two rules keep it honest, and warmth is not a licence to drop either:
  *   1. It renders no business data. Everything here is static markup, so the
  *      page cannot leak a customer's details by being indexed or cached.
  *   2. It claims only what the app actually does. Where something is missing it
- *      says so plainly - see the Integrations and FAQ tabs.
+ *      says so plainly - see the Integrations and FAQ tabs. A landing page that
+ *      oversells is the fastest way to lose the trust it was trying to win, so
+ *      the awkward answers stay even where a warmer wording was tempting.
  *
  * It does not reuse views/header.php, which assumes a signed-in user, and it
  * loads its own stylesheet so the app's stylesheet stays untouched.
@@ -30,66 +38,72 @@ $isSignedIn = is_logged_in();
 $pipelineStages = deal_stages();
 $leadStatuses   = lead_statuses();
 
-/** One line per feature, grouped so the tab renders a consistent card grid. */
+/** One line per feature, grouped so the tab renders a consistent card grid.
+ *
+ *  Written as what you get rather than which columns exist. "Clients with
+ *  company, named contact, email, phone, address and notes" describes a schema;
+ *  "the contact details you actually need, in one record" describes a reason to
+ *  use it. Same features, second one is aimed at the person reading.
+ */
 $featureGroups = [
     [
-        'title' => 'Contacts and pipeline',
+        'title' => 'Customers and pipeline',
         'icon'  => 'bi-people-fill',
         'items' => [
-            'Clients with company, named contact, email, phone, address and notes',
-            'Leads with a source, an owner and a status that runs to won or lost',
-            'A Kanban pipeline of deals in six stages, with per-stage totals',
-            'Converting a lead creates a deal that keeps pointing back at it',
+            'Every customer in one record, with their contact details and notes',
+            'Leads tracked from first contact through to won or lost',
+            'A Kanban board of live deals, with the value in each stage',
+            'Turn a won lead into a deal without retyping a thing',
         ],
     ],
     [
         'title' => 'Follow-ups',
         'icon'  => 'bi-check2-square',
         'items' => [
-            'Tasks with a due date, a priority and an assignee',
-            'One-click complete and reopen, stamping when it was finished',
-            'An overdue-only filter, plus a dashboard panel for what is due',
-            'Calls, emails, meetings and notes logged against any client or lead',
+            'Tasks with a due date, so nothing you promised gets forgotten',
+            'One click to mark something done, and it records when',
+            'A single list of what is overdue and what is due today',
+            'Calls, emails, meetings and notes logged against the customer',
         ],
     ],
     [
         'title' => 'Finding things',
         'icon'  => 'bi-search',
         'items' => [
-            'Search across company, contact, email and phone',
-            'Filter by status, owner, source, priority and date range',
-            'Sortable columns with an allow-list, so the query cannot be rewritten',
-            'Paginated lists throughout',
+            'Search by company, contact name, email or phone',
+            'Filter down to the records you actually care about today',
+            'Sort by any column, so the list reads the way you work',
+            'Clean paged lists instead of an endless scroll',
         ],
     ],
     [
-        'title' => 'Reporting',
+        'title' => 'Knowing where you stand',
         'icon'  => 'bi-bar-chart-fill',
         'items' => [
-            'Win rate by count and by value, plus a weighted forecast',
-            'Monthly activity, new clients and new leads as a time series',
-            'Team performance and clients-per-owner breakdowns',
-            'Won versus lost, lead sources and activity mix',
+            'Win rate by deal count and by value',
+            'A forecast weighted by how far each deal has actually got',
+            'Growth over time, and how each person is performing',
+            'Which sources actually produce customers, not just leads',
         ],
     ],
     [
-        'title' => 'People and permissions',
+        'title' => 'Working as a team',
         'icon'  => 'bi-person-badge-fill',
         'items' => [
-            'Admin and staff roles, with staff limited to their own records',
-            'Reading and writing are gated separately, so access can be relaxed',
-            'Ownership checks re-run in every POST handler, not just the UI',
-            'Nobody is offered an Edit or Delete button they cannot use',
+            'Admin and staff roles, so nobody edits what they should not',
+            'Staff see their own accounts; the shared view stays shared',
+            'Permissions checked on the server, not just hidden in the interface',
+            'No buttons offered that would be refused if you pressed them',
         ],
     ],
     [
-        'title' => 'Safety net',
+        'title' => 'Nothing gets lost',
         'icon'  => 'bi-shield-lock-fill',
         'items' => [
-            'Deleting is reversible - records move to a recycle bin',
-            'Restoring a client brings its deals, tasks and history with it',
-            'Every sign-in attempt is recorded and failures are throttled',
-            'A backup script, because database.sql drops tables on import',
+            'Deleting is reversible - records go to a recycle bin first',
+            'Restoring a customer brings its deals and tasks back too',
+            'A permanent record of who changed what, and what it was before',
+            'A backup script, so a bad import is never the end of the story',
         ],
     ],
 ];
@@ -124,51 +138,92 @@ $stackPlanned = [
     'Calendar sync'        => 'Not built',
 ];
 
-/** FAQ. The "not yet" answers are the point - see the note above. */
+/** FAQ. The "not yet" answers are the point - see the note above.
+ *
+ *  Kept blunt where the answer is a limitation. Softening "no" into "coming soon"
+ *  on a feature that does not exist is how a page loses the reader's trust, and
+ *  these are the questions someone will ask before they commit a customer list.
+ */
 $faq = [
     [
-        'q' => 'Can I export my data?',
-        'a' => 'Yes - every list screen has an export button, for clients, leads, deals, tasks and activities. The file is scoped to your workspace only, and it is your whole workspace, not just the page you were looking at. There is also <code>tools/backup.ps1</code>, which dumps the whole database to a timestamped file and refuses to write inside the web root.',
+        'q' => 'Do I have to host this somewhere myself?',
+        'a' => 'Yes. There is no hosted version of ClientFlow to sign up for - you put it on a web
+                server you control, and your customer data stays there. That is the trade: nobody else
+                holds your list, and you are the one responsible for backups. If you would rather not
+                run a server at all, this is the wrong tool for you.',
+    ],
+    [
+        'q' => 'Can I get my data out?',
+        'a' => 'Yes, and you should be able to leave whenever you want. Every list screen has an
+                export button, for clients, leads, deals, tasks and activities, and there is a bundle
+                that gathers your whole workspace into one download. The file contains only your own
+                workspace. There is also <code>tools/backup.ps1</code>, which takes a full copy of
+                the database to a timestamped file.',
     ],
     [
         'q' => 'Can I bring my data in from a spreadsheet?',
-        'a' => 'Yes. Upload a CSV and you get a review screen first: how many rows will be created, which look like records you already have, and exactly what is wrong with each row that failed. Nothing is saved until you confirm. Column headings are matched loosely, so <code>Company Name</code> and <code>company_name</code> both work, and a file exported from here comes straight back in.',
+        'a' => 'Yes. Upload a CSV and you get a review screen first: how many records will be
+                created, which look like ones you already have, and exactly what is wrong with any
+                row that failed. Nothing is saved until you confirm. Column headings are matched
+                loosely, so <code>Company Name</code> and <code>company_name</code> both work, and a
+                file you export from here comes straight back in.',
     ],
     [
-        'q' => 'Does it send email or integrate with my inbox?',
-        'a' => 'No. You can log a call, an email, a meeting or a note against a client or lead, but the app sends nothing and reads no mailbox. Email sending and mailbox sync are both unbuilt.',
+        'q' => 'Does it send email or connect to my inbox?',
+        'a' => 'No. You can record a call, an email, a meeting or a note against a customer, and it
+                is all there next time you look - but nothing is sent from the app and it does not
+                read your mailbox. Sending email and inbox sync are both unbuilt.',
     ],
     [
-        'q' => 'What happens if I delete a client?',
-        'a' => 'It moves to the recycle bin rather than being destroyed, and its deals, tasks and activity history stay intact and hidden. An administrator can restore the client and everything attached to it comes straight back. Only "Delete forever" is irreversible, and it asks you to type the record name first.',
+        'q' => 'What happens if I delete a customer by mistake?',
+        'a' => 'They move to a recycle bin rather than disappearing, and their deals, tasks and
+                history stay intact and hidden. An administrator can restore them and everything
+                attached comes straight back. Only "Delete forever" is irreversible, and it makes you
+                type the record\'s name first.',
     ],
     [
-        'q' => 'Is it multi-user?',
-        'a' => 'Yes, with two roles. Admins can see and edit everything; staff are limited to records they created or are assigned to. That applies to editing and to opening a record\'s detail page. Lists and reports deliberately stay shared across the team.',
+        'q' => 'Can more than one person work in it?',
+        'a' => 'Yes, with two roles. Admins can see and edit everything; staff are limited to
+                records they created or are assigned to. That applies to editing and to opening a
+                record at all. Lists and reports stay shared across the team, so you are not all
+                working from different versions of the truth.',
+    ],
+    [
+        'q' => 'Can I see who changed a record?',
+        'a' => 'Yes. There is an audit log, and it records values rather than just events. Every
+                create, edit, delete, restore and sign-in is recorded with who did it and when, and
+                an edit shows what each field was before as well as after - not just "someone edited
+                this record". Entries are kept permanently and cannot be changed or removed from the
+                app.',
     ],
     [
         'q' => 'Does it need an internet connection?',
-        'a' => 'No. Bootstrap, the icons and the fonts are all vendored into the project, so the app makes no third-party requests at any point - not even on an error page.',
+        'a' => 'No. The interface, the icons and the fonts all ship inside the project, so it makes
+                no third-party requests at any point - not even on an error page.',
     ],
     [
         'q' => 'What does it need to run?',
-        'a' => 'XAMPP or any LAMP stack: PHP 8, MySQL 5.7 or newer, and Apache. Import <code>database.sql</code> and sign in. There is nothing to install and no build step.',
+        'a' => 'Any ordinary LAMP host: PHP 8, MySQL 5.7 or newer, and Apache. On a local machine
+                that usually means XAMPP. Import <code>database.sql</code>, create an account, and
+                you are in. There is nothing to install and no build step.',
     ],
     [
-        'q' => 'Is there an audit log?',
-        'a' => 'Yes, and it records values rather than just events. Every create, edit, delete, restore and sign-in is logged with who did it and when, and an edit records the value of each field before and after - not just "record 42 was updated". Entries are kept permanently and cannot be edited or deleted from the app.',
+        'q' => 'Can I track several people at one company?',
+        'a' => 'Not yet, and it is a real limitation rather than a wording issue. A customer record
+                holds one named contact, with their email and phone. Tracking several people at one
+                company currently means separate customer records, which is not how a sales team
+                actually works. This is the largest gap in the app.',
     ],
     [
-        'q' => 'Can more than one person work at a company?',
-        'a' => 'A company record holds one named contact, with their email and phone. There is no separate contacts table yet, so tracking several people at one company means separate client records. Multiple contacts per account is a real gap in a production CRM.',
-    ],
-    [
-        'q' => 'How is this licensed?',
-        'a' => 'It is provided as-is for learning and portfolio use, not under an open-source licence. Bootstrap and Bootstrap Icons are MIT licensed and vendored under <code>assets/vendor/</code>.',
+        'q' => 'Can I rely on this being maintained?',
+        'a' => 'Not in the way you would rely on a paid product. There is no company behind it, no
+                support desk and no service level agreement, and it is not sold. It is a complete,
+                working CRM you can read and change yourself - which is the point of it - but if you
+                need someone to call, this is not that.',
     ],
 ];
 
-$pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
+$pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -176,7 +231,7 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($pageTitle) ?></title>
-    <meta name="description" content="ClientFlow is a CRM built with plain PHP and MySQL: clients, leads, a Kanban pipeline, tasks, activity history and reports, with a recycle bin and real sign-in hardening.">
+    <meta name="description" content="ClientFlow keeps your customers, leads, pipeline and follow-ups in one place, so you always know which deal is live and what needs chasing. Reversible deletes, a real audit trail, and you run it on your own server.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#128200;</text></svg>">
     <link href="<?= e(url('assets/vendor/css/bootstrap.min.css')) ?>" rel="stylesheet">
     <link href="<?= e(url('assets/vendor/css/bootstrap-icons.min.css')) ?>" rel="stylesheet">
@@ -197,11 +252,11 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
             <span class="fw-semibold"><?= e(APP_SHORT) ?></span>
         </a>
         <nav class="lp-nav-links d-none d-md-flex ms-auto" aria-label="Sections">
-            <a href="#about">About</a>
+            <a href="#about">Overview</a>
             <a href="#features">Features</a>
             <a href="#preview">Preview</a>
-            <a href="#workflow">Workflow</a>
-            <a href="#setup">Get started</a>
+            <a href="#workflow">How it works</a>
+            <a href="#setup">Run it yourself</a>
             <a href="#faq">FAQ</a>
         </nav>
         <div class="d-flex gap-2 ms-md-0 ms-auto">
@@ -226,16 +281,16 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
         <div class="row align-items-center g-5">
             <div class="col-lg-6">
                 <span class="lp-pill">
-                    <i class="bi bi-shield-lock-fill me-1"></i>Sign-in hardening and a recycle bin included
+                    <i class="bi bi-shield-lock-fill me-1"></i>Your data stays on your own server
                 </span>
                 <h1 class="lp-h1">
-                    A CRM that does the <span class="lp-grad">boring part properly</span>
+                    Know exactly where <span class="lp-grad">every deal stands</span>
                 </h1>
                 <p class="lp-lead">
-                    Clients, leads, a Kanban pipeline, tasks and activity history in plain PHP and
-                    MySQL. No framework, no build step, no third-party services - and the parts that
-                    usually get skipped, like sign-in throttling and reversible deletes, are not
-                    skipped.
+                    Keep every customer, lead and follow-up in one place, so you can see at a glance
+                    what is live, what is stuck and what needs chasing today. Run it on your own
+                    server, and it keeps a permanent record of who changed what and when - including
+                    every edit, so nothing gets quietly overwritten.
                 </p>
                 <div class="d-flex flex-wrap gap-2 mb-4">
                     <?php if ($isSignedIn): ?>
@@ -249,15 +304,16 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                         <a class="btn btn-outline-secondary btn-lg px-4" href="<?= e(url('auth/login.php')) ?>">
                             <i class="bi bi-box-arrow-in-right me-2"></i>Sign in
                         </a>
-                        <a class="btn btn-outline-secondary btn-lg px-4" href="#setup">Get started</a>
+                        <a class="btn btn-outline-secondary btn-lg px-4" href="#setup">Run it yourself</a>
                     <?php endif; ?>
                 </div>
                 <p class="lp-fine mb-0">
                     <?php if (DEMO_MODE): ?>
-                        Demo accounts are shown on the sign-in page and force a password change.
+                        You can look around first: demo accounts are shown on the sign-in page, and
+                        each one asks you to pick its own password before it gets in.
                     <?php else: ?>
-                        Sign-in is protected by rate limiting; accounts with a published password
-                        must change it before they reach the app.
+                        Sign-in is protected by rate limiting, and any account still using a
+                        published password has to change it before it reaches your data.
                     <?php endif; ?>
                 </p>
             </div>
@@ -284,10 +340,10 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
     <div class="container">
         <div class="row g-3">
             <?php foreach ([
-                ['bi-code-slash',   'Plain PHP 8',  'No framework, no Composer'],
-                ['bi-database',     'MySQL',        'Seven tables, foreign keys'],
-                ['bi-wifi-off',     'Works offline','Assets vendored, zero CDN calls'],
-                ['bi-shield-check', 'CSRF + CSP',   'Every form, every response'],
+                ['bi-shield-lock',  'Yours to host',   'Runs on your server, no third parties'],
+                ['bi-clock-history','Full history',    'Every call, email and note kept'],
+                ['bi-trash3',       'Nothing is lost', 'Deletes are reversible'],
+                ['bi-people',       'Built for a team','Admin and staff, separate access'],
             ] as [$icon, $label, $hint]): ?>
                 <div class="col-6 col-lg-3">
                     <div class="lp-stat">
@@ -308,25 +364,26 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
     <div class="container">
         <div class="row g-5 align-items-center">
             <div class="col-lg-5">
-                <h2 class="lp-h2">About this project</h2>
+                <h2 class="lp-h2">What this is for</h2>
             </div>
             <div class="col-lg-7">
                 <p class="lp-body">
-                    Most small CRMs are either a hosted product you cannot inspect, or a codebase
-                    where the interesting parts are the ones that were skipped. ClientFlow is an
-                    attempt at the other end: small enough to read in an afternoon, complete enough
-                    to actually keep records in.
+                    Most small-business software is a trade-off: either it is a service you rent and
+                    trust with your customer list, or it is a codebase you are handed and have to
+                    understand before you can rely on it. ClientFlow is the second kind, and it is
+                    built to be the version you can actually read.
                 </p>
                 <p class="lp-body">
-                    Every screen follows the same three steps - validate, save, redirect - and every
-                    database call lives in a model, so the pages stay presentation-only. Each
-                    feature folder carries its own README explaining what is in it and which model
-                    backs it.
+                    It does the everyday work of running a customer list - who you deal with, what
+                    stage each deal is at, what you promised to follow up on - and it keeps the
+                    record properly while it does it. Nothing is retyped between steps, and a deal
+                    keeps pointing back to the lead that produced it, so you can always see where
+                    the revenue came from.
                 </p>
                 <p class="lp-body mb-0">
-                    It is also honest about its limits. The Integrations and FAQ sections below name
-                    what has <em>not</em> been built, because a CRM that hides that is harder to
-                    trust than one that admits it.
+                    It is also honest about where it stops. The Integrations section and the FAQ
+                    below name what has <em>not</em> been built, because software that hides its
+                    limits is harder to trust than software that tells you where they are.
                 </p>
             </div>
         </div>
@@ -470,16 +527,17 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                 <div class="row g-3">
                     <div class="col-lg-6">
                         <div class="lp-card h-100">
-                            <h3 class="lp-card-title"><i class="bi bi-box-arrow-in-down"></i>Runs on</h3>
-                            <p class="lp-fine">What it genuinely needs today.</p>
+                            <h3 class="lp-card-title"><i class="bi bi-box-arrow-in-down"></i>What it runs on</h3>
+                            <p class="lp-fine">Plain, ordinary hosting. Nothing exotic to set up.</p>
                             <ul class="lp-list">
                                 <?php foreach ($stackShips as $name => $note): ?>
                                     <li><strong><?= e($name) ?></strong> &mdash; <?= e($note) ?></li>
                                 <?php endforeach; ?>
                             </ul>
                             <p class="lp-fine mb-0 mt-3">
-                                It also deliberately makes <em>no</em> external calls at runtime:
-                                Bootstrap, the icons and the fonts are vendored into the project.
+                                It also makes <em>no</em> external calls while you use it: the
+                                interface, the icons and the fonts all ship inside the project, so
+                                nothing about your business is sent to anyone else's server.
                             </p>
                         </div>
                     </div>
@@ -489,8 +547,8 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                                 <i class="bi bi-cone-striped"></i>Not built yet
                             </h3>
                             <p class="lp-fine">
-                                Listed because a CRM that hides these is harder to trust than one
-                                that names them.
+                                Listed here on purpose. You should be able to plan around a gap
+                                rather than discover it halfway through a quarter.
                             </p>
                             <ul class="lp-list lp-list-muted">
                                 <?php foreach ($stackPlanned as $name => $note): ?>
@@ -537,32 +595,35 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
         <div class="row justify-content-center">
             <div class="col-lg-8">
                 <div class="text-center mb-4">
-                    <h2 class="lp-h2">Get started</h2>
+                    <h2 class="lp-h2">Running it yourself</h2>
                     <p class="lp-sub">
-                        Four steps. Nothing to install beyond the stack it already needs.
+                        Four steps on any ordinary LAMP host. On a local machine, that is XAMPP.
                     </p>
                 </div>
 
                 <ol class="lp-setup">
                     <li>
                         <h3>Start Apache and MySQL</h3>
-                        <p>Open the XAMPP control panel and start both. Any LAMP stack works.</p>
+                        <p>Open the XAMPP control panel and start both. On a real host, anything
+                           that runs PHP and MySQL will do.</p>
                     </li>
                     <li>
                         <h3>Copy the project into <code>htdocs</code></h3>
-                        <p>Put the folder at <code>htdocs/clientflow</code>, or rename it - every
-                           internal link is generated, so nothing breaks.</p>
+                        <p>Put the folder at <code>htdocs/clientflow</code>, or rename it and move
+                           it - every internal link is generated, so nothing breaks.</p>
                     </li>
                     <li>
                         <h3>Import the database</h3>
                         <p>phpMyAdmin &rarr; Import &rarr; <code>database.sql</code>. It creates the
-                           schema and loads a small fictional dataset.</p>
+                           tables and loads a small fictional sample set to look around at.</p>
                     </li>
                     <li>
-                        <h3>Sign in</h3>
-                        <p>Go to <a href="<?= e(url('auth/login.php')) ?>">the sign-in page</a>. On a
-                           local install the demo accounts are listed there, and each one is required
-                           to choose its own password before it reaches the app.</p>
+                        <h3>Create your workspace</h3>
+                        <p>Go to <a href="<?= e(url('signup.php')) ?>">create a workspace</a> and
+                           register your business - anyone with the link can do this on your
+                           instance. Or sign in to the demo accounts on the
+                           <a href="<?= e(url('auth/login.php')) ?>">sign-in page</a>; each one asks
+                           you to choose its own password first.</p>
                     </li>
                 </ol>
 
@@ -571,14 +632,15 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                     <div>
                         <strong>Before you use this with real data.</strong> Take a backup first with
                         <code>tools/backup.ps1</code>. <code>database.sql</code> begins with
-                        <code>DROP TABLE</code>, so re-importing it erases everything - and there is
-                        no in-app export yet.
+                        <code>DROP TABLE</code>, so re-importing it erases everything. The in-app
+                        exports give you your records, but a backup is what protects you if the
+                        database itself is the thing that goes wrong.
                     </div>
                 </div>
 
                 <div class="text-center mt-4">
-                    <a class="btn btn-primary btn-lg px-4" href="<?= e(url('auth/login.php')) ?>">
-                        <i class="bi bi-box-arrow-in-right me-2"></i>Sign in
+                    <a class="btn btn-primary btn-lg px-4" href="<?= e(url('signup.php')) ?>">
+                        <i class="bi bi-building-add me-2"></i>Create a workspace
                     </a>
                 </div>
             </div>
@@ -598,13 +660,14 @@ $pageTitle = 'ClientFlow CRM - a small, complete CRM for a small business';
                     <span class="fw-semibold"><?= e(APP_NAME) ?></span>
                 </div>
                 <p class="lp-fine mb-0 mt-2">
-                    Plain PHP 8, MySQL and Bootstrap 5. No framework, no build step, no tracking.
+                    Runs on your own server. No tracking, no external calls, nothing about your
+                    business sent anywhere else.
                 </p>
             </div>
             <div class="col-md-6 text-md-end">
                 <p class="lp-fine mb-2">
-                    Provided as-is for learning and portfolio use. Bootstrap and Bootstrap Icons are
-                    MIT licensed.
+                    Not a commercial product: no company behind it, no support desk, and no
+                    service level agreement. Bootstrap and Bootstrap Icons are MIT licensed.
                 </p>
                 <p class="lp-fine mb-0">
                     <?php if ($isSignedIn): ?>

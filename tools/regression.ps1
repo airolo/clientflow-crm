@@ -390,12 +390,20 @@ Assert 'landing page makes no off-origin requests' (-not ($marketing -match '(?:
 Assert 'landing page renders no client records' (-not ($marketing -match 'Northwind|Bluepeak|Ironbridge'))
 Assert 'landing page renders no seeded passwords' (-not ($marketing -match 'admin123|staff123|\$2y\$'))
 Assert 'landing page does not claim an open-source licence' (-not ($marketing -match '(?i)ClientFlow.{0,40}(MIT|open.?source) licen'))
-Assert 'landing page admits the missing audit log' ($marketing -match 'audit log')
+# Was "admits the missing audit log", which stopped being true when the audit log
+# landed - the assertion kept passing on the page's wording while its name said
+# the opposite. Assert what the page should now actually do: describe the log.
+Assert 'landing page describes the audit log' ($marketing -match 'audit log')
 # CSV import and export now exist, so the landing page must no longer claim they
 # are unbuilt. Asserting the absence of a stale claim, because the old assertion
 # here was "admits CSV export is unbuilt" and it kept passing while the page was
 # simply wrong.
 Assert 'landing page no longer claims CSV export is missing' (-not ($marketing -match 'no CSV export|Not built yet.*CSV|CSV import and export.*No export button'))
+# A second stale claim of the same kind, which the pattern above missed because
+# the wording differed: the backup callout still said "there is no in-app export
+# yet" long after export shipped on every list screen. Both phrasings are now
+# listed, so either one coming back fails the build.
+Assert 'landing page no longer claims there is no in-app export' (-not ($marketing -match 'no in-app export|no export button|there is no export'))
 Assert 'landing page offers workspace signup' ($marketing -match 'signup\.php')
 
 # Screenshots must actually resolve, not fall back to the placeholder.

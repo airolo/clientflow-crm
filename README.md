@@ -472,15 +472,38 @@ saving does not resubmit, and success messages survive the hop through the sessi
 `index.php` is the only page in the project that is **not** behind `require_login()`. It is the
 site root, so it is what a visitor sees first and it has three rules of its own.
 
+**It is written for a business owner, not a developer.** The copy was rewritten from the ground up
+around what the reader gets and what happens to their data, rather than around columns and
+frameworks. The implementation is still described — but further down, in the Integrations tab, and
+because it earns its place. The design and layout are unchanged: same sections, same tabs, same
+`lp-*` classes, no new stylesheet rules. Only the words changed, and the fact that no CSS was
+touched is what makes that cheap to verify — `landing.css` still defines every custom property the
+page reads, which `regression.ps1` checks.
+
 **It renders no business data.** The whole page is static markup defined in arrays at the top of
 the file — feature bullets, workflow steps, FAQ entries. It never calls a model function. That is
 deliberate: a public page that is indexed, cached or scraped must not be able to expose a
 customer's name, and "it does not query the database" is a guarantee rather than a review item.
 
 **It claims only what the app does.** The Integrations tab is split into what ships and a
-*Not built yet* list, and the FAQ answers the awkward ones directly ("Can I export to CSV?" →
-"No — `tools/backup.ps1` produces a mysqldump"). A CRM that lists integrations it does not have
-is worse than one that admits it, and the repo is public enough that anyone can check.
+*Not built yet* list, and the FAQ answers the awkward ones directly — including the two that cost
+it sales: there is no hosted version, so you host it yourself, and there is no company behind it,
+no support desk and no SLA. A CRM that lists integrations it does not have is worse than one that
+admits it, and the repo is public enough that anyone can check.
+
+Warmth is not a licence to soften those. The two limits most likely to talk someone out of buying
+are both stated plainly in the FAQ, because someone who finds them after committing their customer
+list stops trusting everything else on the page.
+
+**Two stale claims were removed in that rewrite**, and both had been sitting there while the
+features they denied existed:
+
+- The backup callout still read *"there is no in-app export yet"* — false since CSV export and the
+  workspace bundle shipped. The existing CSV assertion had a narrower pattern and did not match
+  this wording, which is precisely how a page ends up quietly wrong. `regression.ps1` now checks
+  all three phrasings.
+- `tools/backup.ps1`'s help text said *"There is no export button in the app"*. Same claim, same
+  age.
 
 **It has its own stylesheet, layered on top of the app's.** `index.php` loads `style.css` first,
 then `assets/css/landing.css`. That ordering matters: `style.css` owns the brand tokens
