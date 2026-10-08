@@ -101,16 +101,24 @@ function csv_export_filename(string $kind): string
     return 'clientflow-' . $slug . '-' . $kind . '-' . date('Y-m-d') . '.csv';
 }
 
-/** Write the header row. */
-function csv_emit_header(array $headers): void
+/**
+ * Write the header row.
+ *
+ * $handle defaults to the download stream. The workspace bundle passes a
+ * temporary file handle instead, so each CSV is built somewhere else before
+ * being added to the zip - writing them to php://output and then zipping the
+ * temp files produced an archive with empty members and a response whose body
+ * had already been committed.
+ */
+function csv_emit_header(array $headers, $handle = null): void
 {
-    fputcsv(csv_handle(), array_map('csv_formula_safe', $headers));
+    fputcsv($handle ?? csv_handle(), array_map('csv_formula_safe', $headers));
 }
 
 /** Write one data row. */
-function csv_emit_row(array $values): void
+function csv_emit_row(array $values, $handle = null): void
 {
-    fputcsv(csv_handle(), array_map('csv_formula_safe', $values));
+    fputcsv($handle ?? csv_handle(), array_map('csv_formula_safe', $values));
 }
 
 /**

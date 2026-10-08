@@ -37,7 +37,11 @@ param(
     [int]   $Keep       = 30,
     [string]$MySql      = 'C:\xampp\mysql\bin\mysqldump.exe',
     [string]$DbUser     = 'root',
-    [string]$DbPass     = ''
+    [string]$DbPass     = '',
+    # The MySQL *client*, used only to print correct restore instructions.
+    # Confusing the two is how the script came to tell people to run mysqldump to
+    # perform a restore, which creates nothing.
+    [string]$MysqlClient = 'C:\xampp\mysql\bin\mysql.exe'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -130,9 +134,13 @@ if ($Keep -gt 0) {
 }
 
 Write-Output ""
-Write-Output "To restore, import it through phpMyAdmin (select the database, then Import),"
-Write-Output "or from a command prompt:"
-Write-Output "  `"$MySql`" --user=$DbUser $Database < `"$outFile`""
+Write-Output "To restore it, use the restore script, which takes a safety backup first:"
+Write-Output "  powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -File `"$outFile`" -Database $Database"
+Write-Output ""
+Write-Output "Or import it by hand through phpMyAdmin: select the database, then Import."
+Write-Output "From a command prompt, note it is mysql.exe and NOT mysqldump - mysqldump"
+Write-Output "produces dumps and does not read them back:"
+Write-Output "  `"$MysqlClient`" --user=$DbUser $Database < `"$outFile`""
 Write-Output ""
 Write-Output "NOTE: database.sql drops every table on import. Import a backup, never that file,"
 Write-Output "unless you genuinely intend to wipe the data."
