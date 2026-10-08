@@ -156,7 +156,7 @@ $faq = [
     ],
     [
         'q' => 'Is there an audit log?',
-        'a' => 'Partly, and it is worth being precise. Every sign-in attempt is recorded, and the recycle bin records what was deleted and by whom. But there is no log of every field change, and no record of what a record looked like before it was edited - so restoring is not a full undo. A proper audit log is the single most valuable thing missing.',
+        'a' => 'Yes, and it records values rather than just events. Every create, edit, delete, restore and sign-in is logged with who did it and when, and an edit records the value of each field before and after - not just "record 42 was updated". Entries are kept permanently and cannot be edited or deleted from the app.',
     ],
     [
         'q' => 'Can more than one person work at a company?',

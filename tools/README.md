@@ -99,6 +99,15 @@ purges rows by bare `id`.
 closed, which is the desired outcome — but it means the check is worth keeping,
 because it catches the mistake at commit time instead of at runtime.
 
+`audit_log` is in the scoped-table list. It is a tenant-scoped table like any
+other, and a filter in `audit_log.php` must never reach another workspace's log.
+
+That check does not evaluate PHP, so it cannot follow a tenant predicate
+assembled into a string first. `audit_list()` therefore writes
+`WHERE a.tenant_id = ?` literally in both statements and concatenates only the
+*optional* filters after it. The first version built the whole `WHERE` from an
+array and the checker flagged both statements as unscoped.
+
 ## isolation_test.ps1
 
 123 assertions across two real workspaces. This is the only check that can prove
@@ -361,6 +370,57 @@ nothing to write. The bundle also had `ob_end_clean()` in its `finally`, which
 discarded the zip bytes it had just written — serving a correct
 `application/zip` response with a zero-byte body. The archive is now size-checked
 so this fails loudly instead of shipping an empty download.
+
+## audit_test.ps1
+
+77 assertions on the audit log. Run after the others; it creates its own two
+workspaces so cross-tenant reads can actually be tested.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\audit_test.ps1
+```
+
+The core question is whether the log is *accurate*, not whether it exists. So it
+checks that an edit records both values per field, that resaving an unchanged
+form writes nothing, that clearing a field is recorded as a change, that a purged
+record leaves a readable trail, and that one workspace cannot see another's log
+through the page, the filters or a hand-edited parameter. It also asserts the log
+is append-only and unpruned by searching `app/` for `DELETE FROM audit_log` and
+`TRUNCATE`.
+
+### Assertions that passed for the wrong reason
+
+Three failures here were the test's fault, and each had been silently green:
+
+- **`'Audit Co' -notmatch $page`** for cross-tenant visibility. The search filter
+  echoes the term back into its own `<input value>`, so the page contained the
+  company name even when no rows matched. Now asserted on `No matching entries`.
+- **`'>Purge<'` to confirm the action filter worked.** The dropdown lists every
+  action, so the page always contained "Purge". Now asserted on which record names
+  survive the filter.
+- **`TRUNCATE` as a word** to prove nothing prunes the log. It matched "truncated"
+  in prose about dump files. Comment lines are stripped before the search now.
+
+`require_admin()` redirects rather than returning 403, and `Invoke-WebRequest`
+follows redirects — so asserting a non-200 status passed even though the staff
+user loaded the page. Asserted on the final URL instead.
+
+### Fixtures delete audit_log, and must do so first
+
+`fk_audit_tenant` is `ON DELETE RESTRICT`, so a leftover log row blocks the
+tenant delete with error 1451. Every suite that creates a workspace now removes
+`audit_log` before `tenants`. This is the right direction: the app never deletes a
+tenant, and if it ever did, RESTRICT would force an explicit decision about the
+log rather than silently discarding it.
+
+### Valid values, not just valid columns
+
+`client_statuses()` is `prospect` / `active` / `inactive`, and `task_priorities()`
+has no `normal`. Posting `'lead'` or `'normal'` fails validation, the record is
+never created, and every assertion downstream fails on a null id — which reads like
+an application bug and is not one. Check `is_valid_option()` before writing a
+fixture.
 
 ## restore.ps1
 

@@ -23,6 +23,15 @@ if (is_admin()) {
     // in Bootstrap Icons, so it rendered as a blank gap with no error anywhere.
     // tools\regression.ps1 checks every bi-* class against the vendored font.
     $navItems[] = ['label' => 'Users', 'icon' => 'bi-person-badge-fill', 'file' => 'admin/users.php', 'key' => 'users'];
+    // No count badge. audit_count() is a COUNT(*) over a table that only grows,
+    // so showing a number next to it invites it being read as unread items -
+    // something that is not true, since there is nothing to clear.
+    $navItems[] = [
+        'label' => 'Audit log',
+        'icon'  => 'bi-clock-history',
+        'file'  => 'admin/audit_log.php',
+        'key'   => 'audit',
+    ];
     $navItems[] = [
         'label' => 'Recycle bin',
         'icon'  => 'bi-trash3-fill',

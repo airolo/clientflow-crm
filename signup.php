@@ -102,6 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $owner = user_find_in_tenant((int) $created['user_id'], (int) $created['tenant_id']);
                 if ($owner !== null) {
                     sign_in_user($owner, (int) $created['tenant_id']);
+
+    // After sign_in_user, so the new workspace is the tenant in the session and
+    // the row lands in the log the account can actually see. Logged before any
+    // onboarding redirect, because that is a separate request.
+    audit_record('signup', 'tenant', (int) $created['tenant_id'], (string) $created['name']);
                     flash_success(
                         'Your workspace is ready. You are signed in as its administrator.',
                         'welcome.php'

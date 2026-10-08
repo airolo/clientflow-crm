@@ -81,11 +81,17 @@ function activity_create(array $data): int
         null_if_empty($data['details'] ?? null),
         $data['created_by'],
     ]);
-    return (int) db()->lastInsertId();
+    $id = (int) db()->lastInsertId();
+
+    audit_record_create('activity', $id, $data + ['id' => $id], audit_fields('activity'), (string) $data['title']);
+
+    return $id;
 }
 
 function activity_update(int $id, array $data): void
 {
+    $before = activity_find($id);
+
     $stmt = db()->prepare(
         'UPDATE activities SET client_id = ?, lead_id = ?, type = ?, title = ?, details = ?
          WHERE tenant_id = ? AND id = ?'
@@ -99,6 +105,15 @@ function activity_update(int $id, array $data): void
         tenant_id(),
         $id,
     ]);
+
+    if ($before !== null) {
+        $fields = audit_fields('activity');
+        $after = $before;
+        foreach (array_keys($fields) as $column) {
+            $after[$column] = $data[$column] ?? $before[$column];
+        }
+        audit_record_update('activity', $id, $before, $after, $fields, (string) ($data['title'] ?? ''));
+    }
 }
 
 function activity_delete(int $id): void

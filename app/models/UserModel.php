@@ -117,14 +117,35 @@ function user_create(array $data): int
         !empty($data['is_active']) ? 1 : 0,
         $mustChange,
     ]);
-    return (int) db()->lastInsertId();
+    $newId = (int) db()->lastInsertId();
+
+    // Passwords are never included. An audit trail readable by workspace admins
+    // has no business carrying hashes of them.
+    audit_record_create('user', $newId, $data + ['id' => $newId], audit_fields('user'), (string) $data['name']);
+
+    return $newId;
 }
 
 /** Update profile fields (name, email, phone). */
 function user_update_profile(int $id, array $data): void
 {
+    $before = user_find($id);
+
     $stmt = db()->prepare('UPDATE users SET name = ?, email = ?, phone = ? WHERE tenant_id = ? AND id = ?');
     $stmt->execute([$data['name'], $data['email'], null_if_empty($data['phone'] ?? null), tenant_id(), $id]);
+
+    if ($before !== null) {
+        // array_merge, not `$before + [...]`: + keeps the left operand's value
+        // for a key it already has, so the new values would be discarded and the
+        // diff would come back empty.
+        $after = array_merge($before, [
+            'name'  => $data['name'],
+            'email' => $data['email'],
+            'phone' => null_if_empty($data['phone'] ?? null),
+        ]);
+        $fields = ['name' => 'Name', 'email' => 'Email', 'phone' => 'Phone'];
+        audit_record_update('user', $id, $before, $after, $fields, (string) $data['name']);
+    }
 }
 
 /** Change a password after verifying the current one. */
@@ -163,6 +184,8 @@ function user_must_change_password(int $id): bool
  */
 function user_update_admin(int $id, array $data): void
 {
+    $before = user_find($id);
+
     $fields = [
         'name'      => $data['name'],
         'email'     => $data['email'],
@@ -183,12 +206,48 @@ function user_update_admin(int $id, array $data): void
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
+
+    // Role and deactivation are the two changes a workspace owner most often
+    // has to defend, so they are logged with the same before/after detail as
+    // everything else. Setting a new password is noted as a fact rather than a
+    // diff, and the value itself never reaches the log.
+    if ($before !== null) {
+        $after = $before;
+        foreach (array_keys(audit_fields('user')) as $column) {
+            if (array_key_exists($column, $fields)) {
+                $after[$column] = $fields[$column];
+            }
+        }
+        $changes = audit_diff($before, $after, audit_fields('user'));
+
+        if (!empty($data['password'])) {
+            $changes[] = [
+                'field' => 'password_hash',
+                'label' => 'Password',
+                'from'  => null,
+                'to'    => null,
+            ];
+        }
+
+        if ($changes !== []) {
+            audit_record('update', 'user', $id, (string) $data['name'], $changes);
+        }
+    }
 }
 
 function user_delete(int $id): void
 {
+    $before = user_find($id);
+
     $stmt = db()->prepare('DELETE FROM users WHERE tenant_id = ? AND id = ?');
     $stmt->execute([tenant_id(), $id]);
+
+    // users.audit_log.user_id is ON DELETE SET NULL, so the row is kept and
+    // merely orphaned. user_name survives on it, which is the point: a deleted
+    // colleague's actions still have to be attributable.
+    if ($stmt->rowCount() > 0 && $before !== null) {
+        audit_record_simple('delete', 'user', $id, (string) ($before['name'] ?? ('#' . $id)));
+    }
 }
 
 /**

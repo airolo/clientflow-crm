@@ -47,7 +47,10 @@ if ($Root -eq '') {
 # Tables that carry a tenant_id. `tenants` is the lookup itself, and
 # `login_attempts` deliberately has no foreign key: failures against an unknown
 # workspace are recorded with tenant_id NULL.
-$scopedTables = @('users', 'clients', 'leads', 'deals', 'tasks', 'activities')
+# Tenants is absent because it is the scoping column itself, not a scoped table.
+# audit_log is included: it is read with the same session-derived tenant_id as
+# every other table, and a filter there must never reach another workspace's log.
+$scopedTables = @('users', 'clients', 'leads', 'deals', 'tasks', 'activities', 'audit_log')
 
 $files = @(
     Get-ChildItem -Path (Join-Path $Root 'app\models') -Filter *.php

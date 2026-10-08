@@ -171,6 +171,9 @@ DELETE FROM $DbName.leads      WHERE tenant_id IN (SELECT id FROM $DbName.tenant
 DELETE FROM $DbName.clients    WHERE tenant_id IN (SELECT id FROM $DbName.tenants WHERE slug LIKE 'imp-%');
 DELETE FROM $DbName.login_attempts WHERE email LIKE '%@import.test';
 DELETE FROM $DbName.users   WHERE email LIKE '%@import.test';
+-- audit_log first: fk_audit_tenant is ON DELETE RESTRICT, so a log row left
+-- behind by an audited operation would block the tenant delete (error 1451).
+DELETE FROM $DbName.audit_log   WHERE tenant_id IN (SELECT id FROM $DbName.tenants WHERE slug LIKE 'imp-%');
 DELETE FROM $DbName.tenants WHERE slug LIKE 'imp-%';
 "@
 }

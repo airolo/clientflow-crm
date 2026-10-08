@@ -20,6 +20,7 @@ never requests them.
 | `config/config.php` | Constants: database credentials, app name, timezone, `APP_URL`, `DEMO_MODE` |
 | `config/database.php` | The PDO singleton |
 | `models/` | Every SQL statement in the project |
+| `models/AuditModel.php` | Writing and reading `audit_log`: `audit_record()`, `audit_diff()`, `audit_record_update()`, `audit_list()`, `audit_for_entity()` |
 
 ## Reading order for a newcomer
 
@@ -89,6 +90,37 @@ The live-row filter lives in `list_query()` rather than being repeated in every
 query, because a single forgotten `WHERE` would silently show deleted records.
 `SoftDeleteModel` holds the stamp/restore/purge behaviour and the type map that
 keeps table names from being scattered as strings.
+
+`soft_delete_find()` only matches rows already in the bin, which is what every
+caller of it wants. `soft_delete_read_any()` is the counterpart used just before
+a row enters it — using the bin-scoped read there would return null for a live
+row and the audit entry would be silently lost.
+
+## Audit log
+
+`audit_record()` never throws. An audit failure must not roll back a business
+operation that already succeeded: losing an edit because the log was full would
+be a worse outcome than a missing row, so failures go to `error_log()` instead.
+
+Callers pass the *before* state, not a computed diff. `audit_diff()` does the
+comparison, so the "what changed" decision lives in one place rather than being
+re-derived at every call site — which is how two paths end up disagreeing about
+whether something changed.
+
+Read the record first, write second. `client_update()`, `deal_move()`,
+`task_set_status()` and friends all fetch the row before updating it, because
+after the update the old value is gone.
+
+Three PHP traps this code walks into on purpose, each noted at the call site:
+
+- `$before + ['status' => $x]` **discards** `$x`. The `+` operator keeps the left
+  operand's value for a key it already has. Use `array_merge()` when merging new
+  values onto a fetched row.
+- `null` and `''` both mean "empty" in `audit_diff()`, so clearing an already
+  empty field is not a change.
+- A failed sign-in against a nonexistent workspace slug has no tenant to file
+  under and `tenant_id()` throws without a session. `audit_record()` returns
+  early rather than inventing one; `login_attempts` covers that case.
 
 ## The one path that matters
 

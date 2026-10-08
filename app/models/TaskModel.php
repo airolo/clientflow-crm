@@ -88,11 +88,17 @@ function task_create(array $data): int
         $data['assigned_to'] ?: null,
         $data['created_by'],
     ]);
-    return (int) db()->lastInsertId();
+    $id = (int) db()->lastInsertId();
+
+    audit_record_create('task', $id, $data + ['id' => $id], audit_fields('task'), (string) $data['title']);
+
+    return $id;
 }
 
 function task_update(int $id, array $data): void
 {
+    $before = task_find($id);
+
     $stmt = db()->prepare(
         'UPDATE tasks
          SET title = ?, description = ?, client_id = ?, lead_id = ?, due_date = ?,
@@ -111,14 +117,38 @@ function task_update(int $id, array $data): void
         tenant_id(),
         $id,
     ]);
+
+    if ($before !== null) {
+        $fields = audit_fields('task') + ['assigned_to' => 'Assigned to'];
+        $after = $before;
+        foreach (array_keys($fields) as $column) {
+            $after[$column] = $data[$column] ?? $before[$column];
+        }
+        $before['assigned_to'] = audit_user_name($before['assigned_to'] ?? null);
+        $after['assigned_to']  = audit_user_name($data['assigned_to'] ?? null);
+
+        audit_record_update('task', $id, $before, $after, $fields, (string) ($data['title'] ?? ''));
+    }
 }
 
 /** Mark a task completed / reopen it, stamping completed_at. */
 function task_set_status(int $id, string $status): void
 {
+    $before = task_find($id);
+
     $completedAt = $status === 'completed' ? date('Y-m-d H:i:s') : null;
     $stmt = db()->prepare('UPDATE tasks SET status = ?, completed_at = ? WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL');
     $stmt->execute([$status, $completedAt, tenant_id(), $id]);
+
+    // completed_at is deliberately not compared. It is derived from status, so
+    // logging it separately would show every completion as two changes.
+    if ($before !== null && $before['status'] !== $status) {
+        // array_merge, not `$before + [...]`. The + operator keeps the key from
+        // the left operand, so `$before + ['status' => $status]` would silently
+        // discard the new status and the diff would come back empty.
+        $after = array_merge($before, ['status' => $status]);
+        audit_record_update('task', $id, $before, $after, ['status' => 'Status'], (string) $before['title']);
+    }
 }
 
 function task_delete(int $id): void

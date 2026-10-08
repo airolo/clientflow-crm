@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS `leads`;
 DROP TABLE IF EXISTS `clients`;
 DROP TABLE IF EXISTS `login_attempts`;
 DROP TABLE IF EXISTS `signup_attempts`;
+DROP TABLE IF EXISTS `audit_log`;
 DROP TABLE IF EXISTS `tenants`;
 DROP TABLE IF EXISTS `users`;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -129,6 +130,50 @@ CREATE TABLE `signup_attempts` (
   KEY `idx_signup_email_time` (`email`, `attempted_at`),
   KEY `idx_signup_ip_time`    (`ip`, `attempted_at`),
   KEY `idx_signup_time`       (`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =============================================================
+-- audit_log  - field-level history of who changed what
+-- =============================================================
+-- Until this existed the app recorded sign-in attempts and the recycle bin
+-- recorded deletions, so "who changed this client's status, and what was it
+-- before" had no answer.
+--
+-- Append-only: the application never updates or deletes a row here. That is a
+-- convention rather than something the schema can enforce - anyone with DELETE
+-- on this table can still erase it. See migrations\005_audit_log.sql for what
+-- real tamper-evidence would need.
+--
+-- user_name and entity_label are copied rather than joined, because a trail you
+-- cannot read once someone has been deleted is not a trail. user_id is set to
+-- NULL rather than cascading, for the same reason. entity_id has no foreign key
+-- at all: an audit row has to outlive the record it describes, including after
+-- "Delete forever".
+CREATE TABLE `audit_log` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `tenant_id`    INT UNSIGNED NOT NULL,
+  `user_id`      INT UNSIGNED DEFAULT NULL,
+  `user_name`    VARCHAR(100) DEFAULT NULL,
+  `action`       ENUM('create','update','delete','restore','purge',
+                       'login','login_failed','logout','signup','import',
+                       'suspend','activate') NOT NULL,
+  `entity_type`  VARCHAR(32) NOT NULL,
+  `entity_id`    INT UNSIGNED DEFAULT NULL,
+  `entity_label` VARCHAR(200) DEFAULT NULL,
+  `changes`      TEXT DEFAULT NULL,
+  `ip`           VARCHAR(45) DEFAULT NULL,
+  `user_agent`   VARCHAR(255) DEFAULT NULL,
+  `created_at`   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_tenant_time`  (`tenant_id`, `created_at`),
+  KEY `idx_audit_entity`       (`tenant_id`, `entity_type`, `entity_id`),
+  KEY `idx_audit_user_time`    (`tenant_id`, `user_id`, `created_at`),
+  KEY `idx_audit_action_time`  (`tenant_id`, `action`, `created_at`),
+  CONSTRAINT `fk_audit_tenant` FOREIGN KEY (`tenant_id`)
+    REFERENCES `tenants` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`)
+    REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

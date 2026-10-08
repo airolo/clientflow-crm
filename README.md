@@ -588,9 +588,46 @@ everywhere: lists, search, detail pages, dashboard aggregates and every report.
 - Login accounts are not part of this: `users` keeps `is_active` for
   deactivation and has no `deleted_at`.
 
-One consequence worth knowing: **there is still no audit log.** Soft delete
-preserves the data and records *that* something was removed and by whom, but not
-what it looked like beforehand, or who edited it. Restoring is not a full undo.
+Soft delete preserves the data. For who removed it and when, see the audit log
+below. Restoring is not a full undo of the edits made before the delete.
+
+### Audit log
+
+`audit_log` records every create, edit, delete, restore, purge, sign-in, failed
+sign-in, sign-out, import, signup and workspace suspension. `admin/audit_log.php`
+is the read-only view; there is no edit or delete control anywhere in the app.
+
+An edit records the value of **each changed field, before and after**, not just
+the fact that something changed:
+
+```
+status     inactive  ->  active
+assigned   Unassigned -> Jo Smith
+```
+
+`assigned_to` is compared as a name rather than an id, because "Unassigned -> Jo
+Smith" is what someone reads months later. Fields that did not change are
+omitted, so resaving a form untouched writes nothing at all. A log full of no-op
+entries is a log nobody reads.
+
+Three things are deliberate:
+
+- **`user_name` and `entity_label` are copied, not joined.** An audit trail you
+  cannot read because the person has left is not a trail.
+- **`entity_id` has no foreign key.** A row must outlive its subject, including
+  after "Delete forever".
+- **There is no retention window.** Nothing in the app prunes it, which is what
+  `tools/audit_test.ps1` asserts.
+
+This is append-only by convention, not by enforcement. Anyone with `DELETE` on
+the table, or with a database dump, can still erase it. Genuine tamper-evidence
+means shipping rows somewhere the app cannot write to, which this build does not
+do.
+
+A failed sign-in against a workspace slug that does not exist is *not* written to
+`audit_log`. There is no tenant to file it under and the column is `NOT NULL`;
+`login_attempts` already records those attempts for throttling, so nothing is
+lost.
 
 ### Response headers
 
@@ -606,12 +643,12 @@ the network nor sends the visitor's IP address to a CDN.
 
 ### Not included
 
-Email sending, file uploads, remember-me tokens, CSRF-per-request tokens, an audit log of who
-changed what, contacts as separate records, and CSV import/export.
+Email sending, file uploads, remember-me tokens, CSRF-per-request tokens, and contacts as separate
+records.
 
-The audit log is the most valuable gap. Without it an admin cannot investigate what a staff member
-changed or destroyed — and once soft delete lands, restoring a record preserves *what* was lost but
-still not *who* removed it.
+CSV import/export and the audit log both landed; see the sections above. Contacts remain the largest
+structural gap: people exist as a client company with a single contact name, or as a lead, so a
+business that deals with several people at one company cannot record all of them.
 
 ---
 

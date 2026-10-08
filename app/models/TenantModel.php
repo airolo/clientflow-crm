@@ -152,8 +152,29 @@ function tenant_create_with_owner(array $tenant, array $owner): array
 /** Suspend or restore a workspace. A suspended tenant cannot sign in. */
 function tenant_set_status(int $id, string $status): void
 {
+    $status = $status === 'suspended' ? 'suspended' : 'active';
+    $before = tenant_find($id);
+
     $stmt = db()->prepare('UPDATE tenants SET status = ? WHERE id = ?');
-    $stmt->execute([$status === 'suspended' ? 'suspended' : 'active', $id]);
+    $stmt->execute([$status, $id]);
+
+    // Suspending a workspace is the most consequential action in the app, so it
+    // is recorded in that workspace's own log, addressed explicitly rather than
+    // through the session. An operator running this from the platform console has
+    // no session tenant, and a log row filed under the wrong workspace would be
+    // worse than none.
+    if ($before !== null && $before['status'] !== $status) {
+        audit_record(
+            $status === 'suspended' ? 'suspend' : 'activate',
+            'tenant',
+            $id,
+            (string) $before['name'],
+            [['field' => 'status', 'label' => 'Workspace status', 'from' => (string) $before['status'], 'to' => $status]],
+            null,
+            $id,
+            'Platform'
+        );
+    }
 }
 
 function tenant_set_plan(int $id, string $plan): void
@@ -165,8 +186,25 @@ function tenant_set_plan(int $id, string $plan): void
 /** Update the settings that vary per business. */
 function tenant_update_settings(int $id, array $data): void
 {
+    // Read first so the log can show currency and timezone changing. Both are
+    // workspace-wide settings, so which ones were altered is worth recording.
+    $before = tenant_find($id);
+
     $stmt = db()->prepare('UPDATE tenants SET name = ?, currency = ?, timezone = ? WHERE id = ?');
     $stmt->execute([$data['name'], $data['currency'], $data['timezone'], $id]);
+
+    if ($before !== null) {
+        $fields = ['name' => 'Business name', 'currency' => 'Currency', 'timezone' => 'Timezone'];
+        // array_merge, not `$before + [...]`: + keeps the left operand's value
+        // for a key it already has, so the new settings would be discarded and
+        // the diff would come back empty.
+        $after = array_merge($before, [
+            'name'     => $data['name'],
+            'currency' => $data['currency'],
+            'timezone' => $data['timezone'],
+        ]);
+        audit_record_update('tenant', $id, $before, $after, $fields, (string) $data['name']);
+    }
 }
 
 /**

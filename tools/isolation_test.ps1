@@ -165,6 +165,12 @@ DELETE FROM $DbName.deals      WHERE created_by IS NULL AND tenant_id IN (SELECT
 DELETE FROM $DbName.leads      WHERE created_by IS NULL AND tenant_id IN (SELECT id FROM $DbName.tenants WHERE slug LIKE 'iso-%');
 DELETE FROM $DbName.clients    WHERE tenant_id IN (SELECT id FROM $DbName.tenants WHERE slug LIKE 'iso-%');
 DELETE FROM $DbName.users      WHERE email LIKE '%@isolation.test';
+-- audit_log must go before tenants: fk_audit_tenant is ON DELETE RESTRICT, so a
+-- leftover log row would block the tenant delete with error 1451. This is the
+-- correct direction of travel - the app never deletes a tenant, and if it ever
+-- did, RESTRICT would force an explicit decision about the log rather than
+-- silently discarding it.
+DELETE FROM $DbName.audit_log   WHERE tenant_id IN (SELECT id FROM $DbName.tenants WHERE slug LIKE 'iso-%');
 DELETE FROM $DbName.tenants    WHERE slug LIKE 'iso-%';
 "@
 }

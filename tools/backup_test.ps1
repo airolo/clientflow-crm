@@ -82,7 +82,11 @@ $expected = [ordered]@{
     leads = [int](Sql "SELECT COUNT(*) FROM $DbName.leads;")
     deals = [int](Sql "SELECT COUNT(*) FROM $DbName.deals;")
     tasks = [int](Sql "SELECT COUNT(*) FROM $DbName.tasks;")
-    activities = [int](Sql "SELECT COUNT(*) FROM $DbName.activities;")
+activities = [int](Sql "SELECT COUNT(*) FROM $DbName.activities;")
+    # audit_log is included so a round trip covers it too. It was added when the
+    # audit log landed; a restore that silently lost the trail would still pass
+    # every other count in this table.
+    audit_log = [int](Sql "SELECT COUNT(*) FROM $DbName.audit_log;")
 }
 
 try {
@@ -101,6 +105,7 @@ try {
         Check 'it ends with the completion marker' ($text -match 'Dump completed on')
         Check 'it covers the tenants table' ($text -match 'CREATE TABLE .tenants.')
         Check 'it covers signup_attempts'   ($text -match 'CREATE TABLE .signup_attempts.')
+    Check 'it covers audit_log'       ($text -match 'CREATE TABLE .audit_log.')
     }
     # The recovery instructions the tool prints must actually restore something.
     Check 'the printed restore command uses mysql.exe, not mysqldump' `

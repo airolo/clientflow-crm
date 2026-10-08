@@ -660,5 +660,24 @@ function import_commit(array $plan, string $type, bool $includeDuplicates = fals
         throw $e;
     }
 
+    // One summary row, logged after the commit so it can only exist if the
+    // import actually landed. Each individual row is already logged as a
+    // 'create' by the model functions above, so this deliberately does not
+    // repeat them - it records the totals of one import action, which is what
+    // someone reconstructing a Tuesday afternoon actually needs.
+    audit_record(
+        'import',
+        $type,
+        null,
+        ucfirst($type) . ' import',
+        [[
+            'field' => 'result',
+            'label' => 'Result',
+            'from'  => null,
+            'to'    => $imported . ' imported, ' . $skipped . ' skipped'
+                . ($failed === [] ? '' : ', ' . count($failed) . ' failed'),
+        ]]
+    );
+
     return ['imported' => $imported, 'skipped' => $skipped, 'failed' => $failed];
 }

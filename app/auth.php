@@ -130,6 +130,8 @@ function attempt_login(string $tenantSlug, string $email, string $password): ?st
         // which workspace slugs exist.
         login_attempt_record(null, $email, false);
         login_attempt_prune();
+        // No audit row here: the workspace does not exist, so there is no tenant
+        // to file it under. login_attempts is the record for this case.
         return 'Those credentials do not match our records.';
     }
 
@@ -145,6 +147,19 @@ function attempt_login(string $tenantSlug, string $email, string $password): ?st
     if (!$user || !password_verify($password, (string) $user['password_hash'])) {
         login_attempt_record($tenantId, $email, false);
         login_attempt_prune();
+        // Only the attempted address, never which of the two checks failed.
+        // A workspace admin reading this sees "who has been trying to get in",
+        // which is the question the log exists to answer.
+        audit_record(
+            'login_failed',
+            'user',
+            $user ? (int) $user['id'] : null,
+            $email,
+            [],
+            $user ? (int) $user['id'] : null,
+            $tenantId,
+            $user ? (string) $user['name'] : $email
+        );
         return 'Those credentials do not match our records.';
     }
     if ((int) $user['is_active'] !== 1) {
@@ -152,6 +167,7 @@ function attempt_login(string $tenantSlug, string $email, string $password): ?st
         // the password was correct, and an attacker should not be able to use
         // this path to lock a real account out of its own login.
         login_attempt_record($tenantId, $email, false);
+        audit_record('login_failed', 'user', (int) $user['id'], (string) $user['email'], [], (int) $user['id'], $tenantId, (string) $user['name']);
         return 'This account has been deactivated. Please contact an administrator.';
     }
 
@@ -159,6 +175,10 @@ function attempt_login(string $tenantSlug, string $email, string $password): ?st
     login_attempt_clear($tenantId, $email);
 
     sign_in_user($user, (int) $tenant['id']);
+
+    // After sign_in_user, so the row is attributed to the session that now
+    // exists rather than being passed the identity in by hand.
+    audit_record('login', 'user', (int) $user['id'], (string) $user['email']);
 
     return null;
 }
@@ -172,6 +192,17 @@ function must_change_password(): bool
 /** Clear session data and the auth cookie. */
 function logout_user(): void
 {
+    // Recorded before the session is torn down, while the identity is still
+    // readable. Logging afterwards would have nothing left to attribute it to.
+    $user = current_user();
+    if ($user !== null) {
+        try {
+            audit_record('logout', 'user', (int) $user['id'], (string) $user['email']);
+        } catch (Throwable $e) {
+            // Never let the log block the sign-out.
+        }
+    }
+
     $_SESSION = [];
 
     if (ini_get('session.use_cookies')) {

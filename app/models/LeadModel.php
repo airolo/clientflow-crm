@@ -89,11 +89,19 @@ function lead_create(array $data): int
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
-    return (int) db()->lastInsertId();
+    $id = (int) db()->lastInsertId();
+
+    audit_record_create('lead', $id, $data + ['id' => $id], audit_fields('lead'), (string) $data['lead_name']);
+
+    return $id;
 }
 
 function lead_update(int $id, array $data): void
 {
+    // Read before writing so the log records what the value was, not only what
+    // it became.
+    $before = lead_find($id);
+
     $stmt = db()->prepare(
         'UPDATE leads
          SET lead_name = ?, company = ?, email = ?, phone = ?, lead_source = ?,
@@ -113,6 +121,18 @@ function lead_update(int $id, array $data): void
         tenant_id(),
         $id,
     ]);
+
+    if ($before !== null) {
+        $fields = audit_fields('lead') + ['assigned_to' => 'Assigned to'];
+        $after = $before;
+        foreach (array_keys($fields) as $column) {
+            $after[$column] = $data[$column] ?? $before[$column];
+        }
+        $before['assigned_to'] = audit_user_name($before['assigned_to'] ?? null);
+        $after['assigned_to']  = audit_user_name($data['assigned_to'] ?? null);
+
+        audit_record_update('lead', $id, $before, $after, $fields, (string) ($data['lead_name'] ?? ''));
+    }
 }
 
 function lead_delete(int $id): void

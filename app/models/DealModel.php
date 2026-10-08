@@ -100,7 +100,11 @@ function deal_create(array $data): int
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
-    return (int) db()->lastInsertId();
+    $id = (int) db()->lastInsertId();
+
+    audit_record_create('deal', $id, $data + ['id' => $id], audit_fields('deal'), (string) $data['deal_title']);
+
+    return $id;
 }
 
 function deal_update(int $id, array $data): void
@@ -123,13 +127,52 @@ function deal_update(int $id, array $data): void
         tenant_id(),
         $id,
     ]);
+
+    audit_deal_change($id, $data);
+}
+
+/**
+ * Log what changed about a deal.
+ *
+ * Stage changes made by dragging a card on the pipeline board go through
+ * deal_move() and are logged there, so a move is recorded without going near
+ * this form. Both write the same 'update' action, so the log reads one way.
+ */
+function audit_deal_change(int $id, array $data): void
+{
+    $before = deal_find($id);
+    if ($before === null) {
+        return;
+    }
+    $fields = audit_fields('deal') + ['assigned_to' => 'Assigned to'];
+    $after = $before;
+    foreach (array_keys($fields) as $column) {
+        $after[$column] = $data[$column] ?? $before[$column];
+    }
+    $before['assigned_to'] = audit_user_name($before['assigned_to'] ?? null);
+    $after['assigned_to']  = audit_user_name($data['assigned_to'] ?? null);
+
+    audit_record_update('deal', $id, $before, $after, $fields, (string) ($data['deal_title'] ?? ''));
 }
 
 /** Move a deal to another stage (pipeline drag action). */
 function deal_move(int $id, string $stage): void
 {
+    // Dragging a card on the board is an edit like any other, and it is the one
+    // most likely to be asked about later ("who moved this to lost?"). Logged
+    // here rather than in the form, because this is the path the board uses.
+    $before = deal_find($id);
+
     $stmt = db()->prepare('UPDATE deals SET stage = ? WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL');
     $stmt->execute([$stage, tenant_id(), $id]);
+
+    if ($before !== null && $before['stage'] !== $stage) {
+        // array_merge, not `$before + [...]`: + keeps the left operand's value
+        // for a key it already has, so the new stage would be discarded and the
+        // diff would come back empty.
+        $after = array_merge($before, ['stage' => $stage]);
+        audit_record_update('deal', $id, $before, $after, ['stage' => 'Stage'], (string) $before['deal_title']);
+    }
 }
 
 /** Stamp a deal as deleted. It keeps its row, value and history. */

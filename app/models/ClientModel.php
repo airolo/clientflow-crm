@@ -129,12 +129,21 @@ function client_create(array $data): int
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
-    return (int) db()->lastInsertId();
+    $id = (int) db()->lastInsertId();
+
+    audit_record_create('client', $id, $data + ['id' => $id], audit_fields('client'), (string) $data['company_name']);
+
+    return $id;
 }
 
 /** Update a client. */
 function client_update(int $id, array $data): void
 {
+    // Read before writing, so the log can say what the value was rather than
+    // only what it became. A row that is somehow already gone is not an audit
+    // event, so nothing is logged in that case.
+    $before = client_find($id);
+
     $stmt = db()->prepare(
         'UPDATE clients
          SET company_name = ?, contact_person = ?, email = ?, phone = ?, address = ?,
@@ -153,6 +162,47 @@ function client_update(int $id, array $data): void
         tenant_id(),
         $id,
     ]);
+
+    if ($before !== null) {
+        audit_client_change($id, $before, $data);
+    }
+}
+
+/**
+ * Log what changed about a client.
+ *
+ * assigned_to is resolved to a name on both sides, so the log reads
+ * "Unassigned -> Jo Smith" rather than "3 -> 4", which is the difference between
+ * an audit trail someone reads and one they learn to ignore.
+ */
+function audit_client_change(int $id, array $before, array $data): void
+{
+    $fields = audit_fields('client') + ['assigned_to' => 'Assigned to'];
+
+    $after = $before;
+    foreach (array_keys($fields) as $column) {
+        $after[$column] = $data[$column] ?? $before[$column];
+    }
+    $before['assigned_to'] = audit_user_name($before['assigned_to'] ?? null);
+    $after['assigned_to']  = audit_user_name($data['assigned_to'] ?? null);
+
+    audit_record_update('client', $id, $before, $after, $fields, (string) ($data['company_name'] ?? ''));
+}
+
+/** The display name for a user id, or 'Unassigned'. For readable audit lines. */
+function audit_user_name($userId): string
+{
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return 'Unassigned';
+    }
+    static $cache = [];
+    if (!isset($cache[$userId])) {
+        $stmt = db()->prepare('SELECT name FROM users WHERE tenant_id = ? AND id = ? LIMIT 1');
+        $stmt->execute([tenant_id(), $userId]);
+        $cache[$userId] = (string) ($stmt->fetchColumn() ?: ('#' . $userId));
+    }
+    return $cache[$userId];
 }
 
 /**

@@ -97,12 +97,45 @@ function soft_delete_row(string $type, int $id): bool
     if (!$meta) {
         return false;
     }
+    // Read first so the audit row can name the record rather than just its id.
+    // soft_delete_find() only matches rows already in the bin, which is exactly
+    // the wrong set here: the row being deleted is still live.
+    $before = soft_delete_read_any($type, $id);
+
     $stmt = db()->prepare(
         "UPDATE {$meta['table']} SET deleted_at = NOW(), deleted_by = ?
          WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL"
     );
     $stmt->execute([current_user_id(), tenant_id(), $id]);
-    return $stmt->rowCount() > 0;
+    $done = $stmt->rowCount() > 0;
+
+    if ($done && $before !== null) {
+        audit_record_simple('delete', $type, $id, (string) ($before[$meta['label']] ?? ('#' . $id)));
+    }
+
+    return $done;
+}
+
+/**
+ * Read one row whether or not it is currently in the recycle bin.
+ *
+ * soft_delete_find() is scoped to deleted rows because every caller of it wants
+ * something from the bin. This is the counterpart for the moment just before a
+ * row enters it.
+ */
+function soft_delete_read_any(string $type, int $id): ?array
+{
+    $meta = soft_delete_type($type);
+    if (!$meta) {
+        return null;
+    }
+    $a = $meta['alias'];
+    $stmt = db()->prepare(
+        "SELECT {$a}.* FROM {$meta['table']} {$a}
+         WHERE {$a}.tenant_id = ? AND {$a}.id = ?"
+    );
+    $stmt->execute([tenant_id(), $id]);
+    return $stmt->fetch() ?: null;
 }
 
 /** Clear the stamp, bringing a row and all of its children back. */
@@ -112,12 +145,20 @@ function soft_delete_restore(string $type, int $id): bool
     if (!$meta) {
         return false;
     }
+    $before = soft_delete_find($type, $id);
+
     $stmt = db()->prepare(
         "UPDATE {$meta['table']} SET deleted_at = NULL, deleted_by = NULL
          WHERE tenant_id = ? AND id = ? AND deleted_at IS NOT NULL"
     );
     $stmt->execute([tenant_id(), $id]);
-    return $stmt->rowCount() > 0;
+    $done = $stmt->rowCount() > 0;
+
+    if ($done && $before !== null) {
+        audit_record_simple('restore', $type, $id, (string) ($before[$meta['label']] ?? ('#' . $id)));
+    }
+
+    return $done;
 }
 
 /**
@@ -131,11 +172,27 @@ function soft_delete_purge(string $type, int $id): bool
     if (!$meta) {
         return false;
     }
+    // Read before the delete. Afterwards there is nothing left to name, and an
+    // audit row that can only say "client #42" is much less use.
+    $before = soft_delete_find($type, $id);
+
     $stmt = db()->prepare(
         "DELETE FROM {$meta['table']} WHERE tenant_id = ? AND id = ? AND deleted_at IS NOT NULL"
     );
     $stmt->execute([tenant_id(), $id]);
-    return $stmt->rowCount() > 0;
+    $done = $stmt->rowCount() > 0;
+
+    // The one action whose audit row has to outlive its subject: after this,
+    // the record it describes is gone for good. entity_id carries no foreign key
+    // for exactly this reason.
+    if ($done) {
+        $label = $before !== null
+            ? (string) ($before[$meta['label']] ?? ('#' . $id))
+            : ('#' . $id);
+        audit_record_simple('purge', $type, $id, $label);
+    }
+
+    return $done;
 }
 
 /** Fetch one deleted row for the recycle bin, or null. */
