@@ -98,6 +98,10 @@ function require_active_tenant(): void
         flash('danger', 'This workspace has been suspended. Please contact support.');
         redirect('login.php');
     }
+
+    // After the status check, so a suspended workspace cannot change the app's
+    // behaviour on the way out.
+    tenant_apply_timezone();
 }
 
 /** True when this record belongs to the signed-in tenant. */
@@ -109,13 +113,37 @@ function tenant_owns(array $record): bool
 /**
  * Currency for the current workspace, for formatting money.
  *
- * The money() helpers still hardcode GBP; wiring them to this is the per-tenant
- * currency work, not the tenancy work, so they are left alone here rather than
- * half-changed. This exists so that work has one place to read from.
+ * Falls back to GBP when there is no workspace - the public landing page and the
+ * sign-in page run before one exists, and they still print money figures.
  */
 function tenant_currency(): string
 {
     return (string) (tenant_current()['currency'] ?? 'GBP');
+}
+
+/** The symbol to print in front of an amount. */
+function tenant_currency_symbol(): string
+{
+    return tenant_currency_symbol_for(tenant_currency());
+}
+
+/** Apply the workspace's timezone for the rest of this request.
+ *
+ * Called from require_active_tenant(), which every authenticated page reaches
+ * before any model runs. Without it the whole app would print times in
+ * APP_TIMEZONE and a workspace in Auckland would see its own deadlines an hour
+ * out.
+ *
+ * Guarded rather than assumed: a stored zone that PHP no longer recognises (a
+ * tzdata rename, or a hand-edited row) must not take the site down, so an
+ * invalid value is ignored and APP_TIMEZONE stands.
+ */
+function tenant_apply_timezone(): void
+{
+    $tz = (string) (tenant_current()['timezone'] ?? '');
+    if ($tz !== '' && in_array($tz, DateTimeZone::listIdentifiers(), true)) {
+        date_default_timezone_set($tz);
+    }
 }
 
 /** Drop the per-request cache. Used by tests and after a tenant switch. */

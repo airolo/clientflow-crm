@@ -67,6 +67,14 @@ function tenant_count(): int
     return (int) db()->query('SELECT COUNT(*) FROM tenants')->fetchColumn();
 }
 
+/** How many staff accounts this workspace has. */
+function tenant_user_count(?int $tenantId = null): int
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM users WHERE tenant_id = ?');
+    $stmt->execute([$tenantId ?? tenant_id()]);
+    return (int) $stmt->fetchColumn();
+}
+
 /** True when the slug is already taken. */
 function tenant_slug_taken(string $slug, ?int $exceptId = null): bool
 {
@@ -161,28 +169,137 @@ function tenant_update_settings(int $id, array $data): void
     $stmt->execute([$data['name'], $data['currency'], $data['timezone'], $id]);
 }
 
-/** Supported currencies, so the settings form is a list rather than free text. */
+/**
+ * Supported currencies, as code => symbol + name.
+ *
+ * The symbol is stored explicitly rather than being taken from the first
+ * character of the name, because three of these share one: SEK, NOK and DKK are
+ * all "kr", so a name-derived symbol would silently label Swedish krona as
+ * Norwegian. Storing them separately means a new currency is one array entry
+ * rather than a naming convention to respect.
+ *
+ * Ordered by the symbol so the dropdown groups roughly by region.
+ */
 function tenant_currencies(): array
 {
     return [
-        'GBP' => '£ Pound sterling',
-        'EUR' => '€ Euro',
-        'USD' => '$ US dollar',
-        'CAD' => 'C$ Canadian dollar',
-        'AUD' => 'A$ Australian dollar',
-        'NZD' => 'NZ$ New Zealand dollar',
-        'CHF' => 'CHF Swiss franc',
-        'SEK' => 'kr Swedish krona',
-        'NOK' => 'kr Norwegian krone',
-        'DKK' => 'kr Danish krone',
-        'PLN' => 'zł Polish złoty',
-        'INR' => '₹ Indian rupee',
-        'JPY' => '¥ Japanese yen',
-        'ZAR' => 'R South African rand',
-        'BRL' => 'R$ Brazilian real',
-        'MXN' => 'Mexican peso',
-        'SGD' => 'S$ Singapore dollar',
-        'HKD' => 'HK$ Hong Kong dollar',
-        'AED' => 'د.إ UAE dirham',
+        'GBP' => ['symbol' => '£',  'name' => 'Pound sterling'],
+        'EUR' => ['symbol' => '€',  'name' => 'Euro'],
+        'USD' => ['symbol' => '$',  'name' => 'US dollar'],
+        'CAD' => ['symbol' => 'C$', 'name' => 'Canadian dollar'],
+        'AUD' => ['symbol' => 'A$', 'name' => 'Australian dollar'],
+        'NZD' => ['symbol' => 'NZ$', 'name' => 'New Zealand dollar'],
+        'CHF' => ['symbol' => 'CHF', 'name' => 'Swiss franc'],
+        'SEK' => ['symbol' => 'kr', 'name' => 'Swedish krona'],
+        'NOK' => ['symbol' => 'kr', 'name' => 'Norwegian krone'],
+        'DKK' => ['symbol' => 'kr', 'name' => 'Danish krone'],
+        'PLN' => ['symbol' => 'zł', 'name' => 'Polish zloty'],
+        'INR' => ['symbol' => '₹',  'name' => 'Indian rupee'],
+        'JPY' => ['symbol' => '¥',  'name' => 'Japanese yen'],
+        'ZAR' => ['symbol' => 'R',  'name' => 'South African rand'],
+        'BRL' => ['symbol' => 'R$', 'name' => 'Brazilian real'],
+        'MXN' => ['symbol' => 'MX$', 'name' => 'Mexican peso'],
+        'SGD' => ['symbol' => 'S$', 'name' => 'Singapore dollar'],
+        'HKD' => ['symbol' => 'HK$', 'name' => 'Hong Kong dollar'],
+        'AED' => ['symbol' => 'د.إ', 'name' => 'UAE dirham'],
     ];
+}
+
+/** True when $code is a currency the settings form offers. */
+function tenant_currency_is_valid(string $code): bool
+{
+    return array_key_exists($code, tenant_currencies());
+}
+
+/**
+ * The symbol to print for a given currency code.
+ *
+ * Falls back to the code itself. An unknown code rendering as "£" would show the
+ * wrong money symbol on every invoice figure, which is worse than showing
+ * "XYZ 1,200.00" and obviously wrong.
+ *
+ * Takes the code explicitly; tenant_currency_symbol() in app/tenancy.php is the
+ * no-argument version that reads the signed-in workspace.
+ */
+function tenant_currency_symbol_for(string $code): string
+{
+    $currencies = tenant_currencies();
+    return $currencies[$code]['symbol'] ?? $code;
+}
+
+/**
+ * Timezones offered in the settings form.
+ *
+ * A curated shortlist rather than DateTimeZone::listIdentifiers(), which is
+ * around 400 entries of which a small business needs a handful. Validation does
+ * not use this list, though - it accepts any identifier PHP recognises, so a
+ * workspace in a region nobody thought of is not blocked from setting its own
+ * zone.
+ */
+function tenant_timezones(): array
+{
+    return [
+        'Europe/London'        => 'London (GMT/BST)',
+        'Europe/Dublin'        => 'Dublin',
+        'Europe/Lisbon'        => 'Lisbon',
+        'Europe/Madrid'        => 'Madrid',
+        'Europe/Paris'         => 'Paris',
+        'Europe/Brussels'      => 'Brussels',
+        'Europe/Amsterdam'     => 'Amsterdam',
+        'Europe/Berlin'        => 'Berlin',
+        'Europe/Zurich'        => 'Zurich',
+        'Europe/Rome'          => 'Rome',
+        'Europe/Prague'        => 'Prague',
+        'Europe/Warsaw'        => 'Warsaw',
+        'Europe/Stockholm'     => 'Stockholm',
+        'Europe/Oslo'          => 'Oslo',
+        'Europe/Copenhagen'    => 'Copenhagen',
+        'Europe/Helsinki'      => 'Helsinki',
+        'Europe/Athens'        => 'Athens',
+        'Europe/Istanbul'      => 'Istanbul',
+        'Europe/Moscow'        => 'Moscow',
+        'Atlantic/Reykjavik'   => 'Reykjavik',
+        'America/New_York'     => 'New York',
+        'America/Chicago'      => 'Chicago',
+        'America/Denver'       => 'Denver',
+        'America/Los_Angeles'  => 'Los Angeles',
+        'America/Vancouver'    => 'Vancouver',
+        'America/Toronto'      => 'Toronto',
+        'America/Mexico_City'  => 'Mexico City',
+        'America/Bogota'       => 'Bogota',
+        'America/Sao_Paulo'    => 'São Paulo',
+        'America/Argentina/Buenos_Aires' => 'Buenos Aires',
+        'Africa/Lagos'         => 'Lagos',
+        'Africa/Cairo'         => 'Cairo',
+        'Africa/Johannesburg'  => 'Johannesburg',
+        'Africa/Nairobi'       => 'Nairobi',
+        'Asia/Dubai'           => 'Dubai',
+        'Asia/Karachi'         => 'Karachi',
+        'Asia/Kolkata'         => 'Kolkata',
+        'Asia/Singapore'       => 'Singapore',
+        'Asia/Bangkok'         => 'Bangkok',
+        'Asia/Jakarta'         => 'Jakarta',
+        'Asia/Hong_Kong'       => 'Hong Kong',
+        'Asia/Shanghai'        => 'Shanghai',
+        'Asia/Tokyo'           => 'Tokyo',
+        'Asia/Seoul'           => 'Seoul',
+        'Australia/Perth'      => 'Perth',
+        'Australia/Adelaide'   => 'Adelaide',
+        'Australia/Sydney'     => 'Sydney',
+        'Australia/Brisbane'   => 'Brisbane',
+        'Pacific/Auckland'     => 'Auckland',
+        'UTC'                  => 'UTC',
+    ];
+}
+
+/**
+ * True when $tz is a timezone identifier PHP recognises.
+ *
+ * Deliberately checks PHP's own list rather than tenant_timezones(), so the
+ * shortlist being curated does not become a restriction on what a workspace may
+ * set.
+ */
+function tenant_timezone_is_valid(string $tz): bool
+{
+    return $tz !== '' && in_array($tz, DateTimeZone::listIdentifiers(), true);
 }

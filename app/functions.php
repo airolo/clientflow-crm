@@ -236,23 +236,39 @@ function verify_csrf(): void
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-/** Format a money amount, e.g. 24000 -> £24,000. */
+/**
+ * Format a money amount in the current workspace's currency.
+ *
+ * 24000 in GBP is "£24,000.00"; in USD, "$24,000.00". The symbol comes from
+ * tenant_currency_symbol(), which falls back to the currency code rather than a
+ * default symbol, so a workspace on an unrecognised code shows something
+ * visibly wrong instead of quietly wrong.
+ *
+ * Calls before there is a workspace - the public landing page - fall back to GBP.
+ */
 function money(float|int|string|null $amount): string
 {
-    return '£' . number_format((float) $amount, 2);
+    return tenant_currency_symbol() . number_format((float) $amount, 2);
 }
 
-/** Compact money for dashboard tiles: 125000 -> £125k. */
+/** Compact money for dashboard tiles: 125000 -> £125k, or $125k in USD. */
 function money_short(float|int|string|null $amount): string
 {
+    $symbol = tenant_currency_symbol();
     $amount = (float) $amount;
     if ($amount >= 1000000) {
-        return '£' . number_format($amount / 1000000, 1) . 'm';
+        return $symbol . number_format($amount / 1000000, 1) . 'm';
     }
     if ($amount >= 1000) {
-        return '£' . number_format($amount / 1000, 0) . 'k';
+        return $symbol . number_format($amount / 1000, 0) . 'k';
     }
-    return '£' . number_format($amount, 0);
+    return $symbol . number_format($amount, 0);
+}
+
+/** The current workspace's currency code, for column headings. */
+function currency_code(): string
+{
+    return tenant_currency();
 }
 
 /** Format a date for display: 2026-10-06 -> 06 Oct 2026. */

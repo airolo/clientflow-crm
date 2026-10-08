@@ -30,6 +30,11 @@ if (is_admin()) {
         'key'   => 'recycle',
         'badge' => $binCount ?: null,
     ];
+    // bi-gear-fill, not bi-sliders-fill / bi-sliders2-fill: neither of those exists
+    // in the vendored icon set, and an icon class that is missing renders as a
+    // blank gap with no error anywhere. tools\regression.ps1 checks every bi-*
+    // class against the vendored css.
+    $navItems[] = ['label' => 'Settings', 'icon' => 'bi-gear-fill', 'file' => 'admin/settings.php', 'key' => 'settings'];
 }
 
 $pendingTasks = $pendingTasks ?? null;
