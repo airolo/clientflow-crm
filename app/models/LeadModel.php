@@ -23,7 +23,7 @@ function lead_list(array $options = []): array
 {
     return list_query([
         'select'  => 'l.*, u.name AS owner_name',
-        'from'    => 'FROM leads l LEFT JOIN users u ON u.id = l.assigned_to',
+        'from'    => 'FROM leads l LEFT JOIN users u ON u.id = l.assigned_to AND u.tenant_id = l.tenant_id',
         'search'  => ['l.lead_name', 'l.company', 'l.email', 'l.phone'],
         'options' => $options,
         'filters' => [
@@ -35,6 +35,7 @@ function lead_list(array $options = []): array
         'sort_default' => 'created',
         'order_by'    => 'l.id DESC',
         'soft_delete' => ['l'],
+        'tenant'      => ['l'],
     ]);
 }
 
@@ -42,23 +43,26 @@ function lead_find(int $id): ?array
 {
     $stmt = db()->prepare(
         'SELECT l.*, u.name AS owner_name, cu.name AS creator_name,
-                (SELECT COUNT(*) FROM deals d WHERE d.lead_id = l.id AND d.deleted_at IS NULL) AS deal_count
+                (SELECT COUNT(*) FROM deals d WHERE d.tenant_id = l.tenant_id AND d.lead_id = l.id AND d.deleted_at IS NULL) AS deal_count
          FROM leads l
-         LEFT JOIN users u  ON u.id = l.assigned_to
-         LEFT JOIN users cu ON cu.id = l.created_by
-         WHERE l.id = ? AND l.deleted_at IS NULL LIMIT 1'
+         LEFT JOIN users u  ON u.id = l.assigned_to AND u.tenant_id = l.tenant_id
+         LEFT JOIN users cu ON cu.id = l.created_by AND cu.tenant_id = l.tenant_id
+         WHERE l.tenant_id = ? AND l.id = ? AND l.deleted_at IS NULL LIMIT 1'
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->fetch() ?: null;
 }
 
 /** All leads as id => label, for task dropdowns. */
 function lead_options(): array
 {
-    $rows = db()->query(
+    $stmt = db()->prepare(
         'SELECT id, lead_name, company FROM leads
-         WHERE deleted_at IS NULL AND status NOT IN ("won","lost") ORDER BY lead_name ASC'
-    )->fetchAll();
+         WHERE tenant_id = ? AND deleted_at IS NULL AND status NOT IN ("won","lost")
+         ORDER BY lead_name ASC'
+    );
+    $stmt->execute([tenant_id()]);
+    $rows = $stmt->fetchAll();
     $options = [];
     foreach ($rows as $row) {
         $options[$row['id']] = $row['lead_name'] . ($row['company'] ? ' (' . $row['company'] . ')' : '');
@@ -69,10 +73,11 @@ function lead_options(): array
 function lead_create(array $data): int
 {
     $stmt = db()->prepare(
-        'INSERT INTO leads (lead_name, company, email, phone, lead_source, status, estimated_value, assigned_to, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO leads (tenant_id, lead_name, company, email, phone, lead_source, status, estimated_value, assigned_to, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
+        tenant_id(),
         $data['lead_name'],
         null_if_empty($data['company'] ?? null),
         null_if_empty($data['email'] ?? null),
@@ -93,7 +98,7 @@ function lead_update(int $id, array $data): void
         'UPDATE leads
          SET lead_name = ?, company = ?, email = ?, phone = ?, lead_source = ?,
              status = ?, estimated_value = ?, assigned_to = ?, notes = ?
-         WHERE id = ?'
+         WHERE tenant_id = ? AND id = ?'
     );
     $stmt->execute([
         $data['lead_name'],
@@ -105,6 +110,7 @@ function lead_update(int $id, array $data): void
         (float) ($data['estimated_value'] ?? 0),
         $data['assigned_to'] ?: null,
         null_if_empty($data['notes'] ?? null),
+        tenant_id(),
         $id,
     ]);
 }
@@ -123,34 +129,41 @@ function lead_restore(int $id): void
 /** Move a lead to a new status (used by the quick status dropdown). */
 function lead_update_status(int $id, string $status): void
 {
-    $stmt = db()->prepare('UPDATE leads SET status = ? WHERE id = ? AND deleted_at IS NULL');
-    $stmt->execute([$status, $id]);
+    $stmt = db()->prepare('UPDATE leads SET status = ? WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL');
+    $stmt->execute([$status, tenant_id(), $id]);
 }
 
 /** Dashboard figures. */
 function lead_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL')->fetchColumn();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM leads WHERE tenant_id = ? AND deleted_at IS NULL');
+    $stmt->execute([tenant_id()]);
+    return (int) $stmt->fetchColumn();
 }
 
 function lead_count_active(): int
 {
-    $stmt = db()->prepare('SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL AND status NOT IN ("won","lost")');
-    $stmt->execute();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM leads WHERE tenant_id = ? AND deleted_at IS NULL AND status NOT IN ("won","lost")');
+    $stmt->execute([tenant_id()]);
     return (int) $stmt->fetchColumn();
 }
 
 function lead_count_by_status(): array
 {
-    return db()->query('SELECT status, COUNT(*) AS total FROM leads WHERE deleted_at IS NULL GROUP BY status')
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    $stmt = db()->prepare('SELECT status, COUNT(*) AS total FROM leads WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY status');
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 function lead_count_by_source(): array
 {
-    return db()->query('SELECT lead_source, COUNT(*) AS total FROM leads WHERE deleted_at IS NULL
-                      GROUP BY lead_source ORDER BY total DESC')
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    $stmt = db()->prepare(
+        'SELECT lead_source, COUNT(*) AS total FROM leads
+         WHERE tenant_id = ? AND deleted_at IS NULL
+         GROUP BY lead_source ORDER BY total DESC'
+    );
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 /** Leads that have no deal yet, i.e. not yet on the pipeline. */
@@ -159,14 +172,15 @@ function lead_unconverted(int $limit = 6): array
     $stmt = db()->prepare(
         'SELECT l.id, l.lead_name, l.company, l.status, l.estimated_value, u.name AS owner_name
          FROM leads l
-         LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE l.deleted_at IS NULL
+         LEFT JOIN users u ON u.id = l.assigned_to AND u.tenant_id = l.tenant_id
+         WHERE l.tenant_id = ? AND l.deleted_at IS NULL
            AND l.status NOT IN ("won","lost")
-           AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.lead_id = l.id AND d.deleted_at IS NULL)
+           AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.tenant_id = l.tenant_id AND d.lead_id = l.id AND d.deleted_at IS NULL)
          ORDER BY l.estimated_value DESC
          LIMIT ?'
     );
-    $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll();
 }

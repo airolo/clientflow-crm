@@ -83,6 +83,11 @@ function soft_delete_type(string $type): ?array
 /**
  * Stamp a row as deleted.
  *
+ * tenant_id is part of the WHERE on every write here. These functions address
+ * rows by bare id from a URL, so without it an admin in one workspace could
+ * delete, restore or permanently purge another workspace's records simply by
+ * editing the id in the query string.
+ *
  * @param string $type one of soft_delete_types()
  * @param int    $id
  */
@@ -93,9 +98,10 @@ function soft_delete_row(string $type, int $id): bool
         return false;
     }
     $stmt = db()->prepare(
-        "UPDATE {$meta['table']} SET deleted_at = NOW(), deleted_by = ? WHERE id = ? AND deleted_at IS NULL"
+        "UPDATE {$meta['table']} SET deleted_at = NOW(), deleted_by = ?
+         WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL"
     );
-    $stmt->execute([current_user_id(), $id]);
+    $stmt->execute([current_user_id(), tenant_id(), $id]);
     return $stmt->rowCount() > 0;
 }
 
@@ -107,9 +113,10 @@ function soft_delete_restore(string $type, int $id): bool
         return false;
     }
     $stmt = db()->prepare(
-        "UPDATE {$meta['table']} SET deleted_at = NULL, deleted_by = NULL WHERE id = ? AND deleted_at IS NOT NULL"
+        "UPDATE {$meta['table']} SET deleted_at = NULL, deleted_by = NULL
+         WHERE tenant_id = ? AND id = ? AND deleted_at IS NOT NULL"
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->rowCount() > 0;
 }
 
@@ -124,8 +131,10 @@ function soft_delete_purge(string $type, int $id): bool
     if (!$meta) {
         return false;
     }
-    $stmt = db()->prepare("DELETE FROM {$meta['table']} WHERE id = ? AND deleted_at IS NOT NULL");
-    $stmt->execute([$id]);
+    $stmt = db()->prepare(
+        "DELETE FROM {$meta['table']} WHERE tenant_id = ? AND id = ? AND deleted_at IS NOT NULL"
+    );
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->rowCount() > 0;
 }
 
@@ -140,10 +149,10 @@ function soft_delete_find(string $type, int $id): ?array
     $stmt = db()->prepare(
         "SELECT {$a}.*, u.name AS deleted_by_name
          FROM {$meta['table']} {$a}
-         LEFT JOIN users u ON u.id = {$a}.deleted_by
-         WHERE {$a}.id = ? AND {$a}.deleted_at IS NOT NULL"
+         LEFT JOIN users u ON u.id = {$a}.deleted_by AND u.tenant_id = {$a}.tenant_id
+         WHERE {$a}.tenant_id = ? AND {$a}.id = ? AND {$a}.deleted_at IS NOT NULL"
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->fetch() ?: null;
 }
 
@@ -168,7 +177,7 @@ function soft_delete_list(string $type, array $options = []): array
     return list_query([
         'select'       => "{$a}.*, u.name AS deleted_by_name",
         'from'         => "FROM {$meta['table']} {$a}
-                           LEFT JOIN users u ON u.id = {$a}.deleted_by",
+                           LEFT JOIN users u ON u.id = {$a}.deleted_by AND u.tenant_id = {$a}.tenant_id",
         'search'       => [$a . '.' . $meta['label'], 'u.name'],
         'options'      => $options,
         'sort'         => [
@@ -180,6 +189,9 @@ function soft_delete_list(string $type, array $options = []): array
         'order_by'     => $a . '.id ASC',
         'only_deleted' => true,
         'soft_delete'  => [$a],
+        // The alias is dynamic (one per soft-deletable type), so the tenant
+        // predicate cannot use the 'tenant' shorthand's default of ['t'].
+        'tenant'       => [$a],
     ]);
 }
 
@@ -187,15 +199,22 @@ function soft_delete_list(string $type, array $options = []): array
  * Total rows currently in the bin, for the admin nav badge.
  *
  * One UNION ALL rather than five separate COUNTs, because this runs on every
- * admin page load for the sidebar badge.
+ * admin page load for the sidebar badge. The tenant id is repeated once per
+ * branch because the whole statement is built as one string and bound
+ * positionally.
  */
 function soft_delete_count(): int
 {
     $parts = [];
+    $params = [];
     foreach (soft_delete_types() as $meta) {
-        $parts[] = 'SELECT COUNT(*) AS total FROM ' . $meta['table'] . ' WHERE deleted_at IS NOT NULL';
+        $parts[] = 'SELECT COUNT(*) AS total FROM ' . $meta['table']
+            . ' WHERE tenant_id = ? AND deleted_at IS NOT NULL';
+        $params[] = tenant_id();
     }
-    return (int) db()->query(implode(' UNION ALL ', $parts))->fetchColumn();
+    $stmt = db()->prepare(implode(' UNION ALL ', $parts));
+    $stmt->execute($params);
+    return (int) $stmt->fetchColumn();
 }
 
 /** Count per type, for the recycle bin tabs. */
@@ -203,7 +222,11 @@ function soft_delete_counts(): array
 {
     $counts = [];
     foreach (soft_delete_types() as $type => $meta) {
-        $counts[$type] = (int) db()->query("SELECT COUNT(*) FROM {$meta['table']} WHERE deleted_at IS NOT NULL")->fetchColumn();
+        $stmt = db()->prepare(
+            "SELECT COUNT(*) FROM {$meta['table']} WHERE tenant_id = ? AND deleted_at IS NOT NULL"
+        );
+        $stmt->execute([tenant_id()]);
+        $counts[$type] = (int) $stmt->fetchColumn();
     }
     return $counts;
 }
@@ -225,9 +248,13 @@ function soft_delete_child_count(string $type, int $id): int
 
     $total = 0;
     foreach ($meta['children'] as $child) {
-        $total += (int) db()->query(
-            "SELECT COUNT(*) FROM {$child} WHERE {$fks[$child]} = $id"
-        )->fetchColumn();
+        // Table and column names come from the literal maps above and $id is
+        // cast to int, so there is no injection path here.
+        $stmt = db()->prepare(
+            "SELECT COUNT(*) FROM {$child} WHERE tenant_id = ? AND {$fks[$child]} = ?"
+        );
+        $stmt->execute([tenant_id(), (int) $id]);
+        $total += (int) $stmt->fetchColumn();
     }
     return $total;
 }

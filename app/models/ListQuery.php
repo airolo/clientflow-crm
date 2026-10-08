@@ -35,6 +35,10 @@ declare(strict_types=1);
  *   order_by    string  extra tie-breaker, e.g. 'c.id ASC'
  *   per_page    int     rows per page override
  *   soft_delete array   table aliases the deleted_at predicate applies to
+ *   tenant      array   table aliases the tenant_id predicate applies to
+ *                       (defaults to ['t']). A caller listing several tenants
+ *                       in one query - the recycle bin, an ops view - passes
+ *                       [] to opt out deliberately.
  *   only_deleted bool    restrict to deleted rows instead of live ones (the
  *                       recycle bin); without it, live rows are returned
  *   where_extra array   raw SQL fragments that always apply and take no
@@ -64,6 +68,21 @@ function list_query(array $config): array
     $deletedTest = !empty($config['only_deleted']) ? 'IS NOT NULL' : 'IS NULL';
     foreach ($config['soft_delete'] ?? ['t'] as $alias) {
         $where[] = "$alias.deleted_at $deletedTest";
+    }
+
+    // Tenant scoping. Applied here for the same reason as soft delete: it is the
+    // single choke point every listing goes through, and a forgotten filter
+    // would show one business another business's customers rather than fail
+    // loudly. The id comes from the session, never from the request.
+    //
+    // The parameter is prepended rather than appended so it binds before any
+    // filter parameters the caller adds later.
+    if (!empty($_SESSION['tenant_id']) && !array_key_exists('tenant', $config)) {
+        $config['tenant'] = ['t'];
+    }
+    foreach ($config['tenant'] ?? [] as $alias) {
+        array_unshift($where, "$alias.tenant_id = ?");
+        array_unshift($params, tenant_id());
     }
 
     // Only meaningful when listing live rows; the bin has no parent visibility
@@ -186,27 +205,27 @@ function related_list(
     int $ownerId,
     int $limit
 ): array {
+    // Not routed through list_query: it builds two different queries and binds
+    // positionally, so the tenant filter is added by hand here. r.tenant_id is
+    // mandatory rather than conditional - a listing that skipped it would leak
+    // another business's rows, and there is no case where omitting it is right.
     $sql = "SELECT r.*, u.name AS owner_name
             FROM $table r
-            LEFT JOIN users u ON u.id = r.$userColumn
-            WHERE r.deleted_at IS NULL";
+            LEFT JOIN users u ON u.id = r.$userColumn AND u.tenant_id = r.tenant_id
+            WHERE r.deleted_at IS NULL AND r.tenant_id = ?";
 
+    $params = [tenant_id()];
     if ($ownerId > 0) {
         $sql .= " AND r.$fkColumn = ?";
+        $params[] = $ownerId;
     }
     $sql .= " ORDER BY $orderBy";
     if ($limit > 0) {
         $sql .= " LIMIT ?";
+        $params[] = $limit;
     }
 
     $stmt = db()->prepare($sql);
-    $pos = 1;
-    if ($ownerId > 0) {
-        $stmt->bindValue($pos++, $ownerId, PDO::PARAM_INT);
-    }
-    if ($limit > 0) {
-        $stmt->bindValue($pos, $limit, PDO::PARAM_INT);
-    }
-    $stmt->execute();
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }

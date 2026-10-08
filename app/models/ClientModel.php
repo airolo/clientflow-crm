@@ -30,7 +30,7 @@ function client_list(array $options = []): array
 {
     return list_query([
         'select'  => 'c.*, u.name AS owner_name',
-        'from'    => 'FROM clients c LEFT JOIN users u ON u.id = c.assigned_to',
+        'from'    => 'FROM clients c LEFT JOIN users u ON u.id = c.assigned_to AND u.tenant_id = c.tenant_id',
         'search'  => ['c.company_name', 'c.contact_person', 'c.email', 'c.phone'],
         'options' => $options,
         'filters' => [
@@ -41,6 +41,7 @@ function client_list(array $options = []): array
         'sort_default' => 'created',
         'order_by'    => 'c.id ASC',
         'soft_delete' => ['c'],
+        'tenant'      => ['c'],
     ]);
 }
 
@@ -48,22 +49,25 @@ function client_list(array $options = []): array
 function client_find(int $id): ?array
 {
     $stmt = db()->prepare(
-        'SELECT c.*, u.name AS owner_name, cu.name AS creator_name
+'SELECT c.*, u.name AS owner_name, cu.name AS creator_name
          FROM clients c
-         LEFT JOIN users u  ON u.id = c.assigned_to
-         LEFT JOIN users cu ON cu.id = c.created_by
-         WHERE c.id = ? AND c.deleted_at IS NULL LIMIT 1'
+         LEFT JOIN users u  ON u.id = c.assigned_to AND u.tenant_id = c.tenant_id
+         LEFT JOIN users cu ON cu.id = c.created_by AND cu.tenant_id = c.tenant_id
+         WHERE c.tenant_id = ? AND c.id = ? AND c.deleted_at IS NULL LIMIT 1'
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->fetch() ?: null;
 }
 
 /** All clients as id => label, for task dropdowns. */
 function client_options(): array
 {
-    $rows = db()->query(
-        'SELECT id, company_name FROM clients WHERE deleted_at IS NULL ORDER BY company_name ASC'
-    )->fetchAll();
+    $stmt = db()->prepare(
+        'SELECT id, company_name FROM clients
+         WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY company_name ASC'
+    );
+    $stmt->execute([tenant_id()]);
+    $rows = $stmt->fetchAll();
     $options = [];
     foreach ($rows as $row) {
         $options[$row['id']] = $row['company_name'];
@@ -74,11 +78,14 @@ function client_options(): array
 /** Create a client. */
 function client_create(array $data): int
 {
+    // tenant_id comes from the session, never from $data: a crafted form must
+    // not be able to file a record into another business.
     $stmt = db()->prepare(
-        'INSERT INTO clients (company_name, contact_person, email, phone, address, status, assigned_to, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO clients (tenant_id, company_name, contact_person, email, phone, address, status, assigned_to, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
+        tenant_id(),
         $data['company_name'],
         $data['contact_person'],
         null_if_empty($data['email'] ?? null),
@@ -99,7 +106,7 @@ function client_update(int $id, array $data): void
         'UPDATE clients
          SET company_name = ?, contact_person = ?, email = ?, phone = ?, address = ?,
              status = ?, assigned_to = ?, notes = ?
-         WHERE id = ?'
+         WHERE tenant_id = ? AND id = ?'
     );
     $stmt->execute([
         $data['company_name'],
@@ -110,6 +117,7 @@ function client_update(int $id, array $data): void
         $data['status'],
         $data['assigned_to'] ?: null,
         null_if_empty($data['notes'] ?? null),
+        tenant_id(),
         $id,
     ]);
 }
@@ -133,14 +141,19 @@ function client_restore(int $id): void
 /** Dashboard counts. */
 function client_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL')->fetchColumn();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND deleted_at IS NULL');
+    $stmt->execute([tenant_id()]);
+    return (int) $stmt->fetchColumn();
 }
 
 function client_count_by_status(): array
 {
-    return db()->query(
-        'SELECT status, COUNT(*) AS total FROM clients WHERE deleted_at IS NULL GROUP BY status'
-    )->fetchAll(PDO::FETCH_KEY_PAIR);
+    $stmt = db()->prepare(
+        'SELECT status, COUNT(*) AS total FROM clients
+         WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY status'
+    );
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 /** Deal totals for one client. */
@@ -148,9 +161,9 @@ function client_deal_summary(int $clientId): array
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS deal_count, COALESCE(SUM(value), 0) AS total_value
-         FROM deals WHERE client_id = ? AND deleted_at IS NULL'
+         FROM deals WHERE tenant_id = ? AND client_id = ? AND deleted_at IS NULL'
     );
-    $stmt->execute([$clientId]);
+    $stmt->execute([tenant_id(), $clientId]);
     $row = $stmt->fetch() ?: ['deal_count' => 0, 'total_value' => 0];
     $row['deal_count'] = (int) $row['deal_count'];
     $row['total_value'] = (float) $row['total_value'];
@@ -163,11 +176,11 @@ function client_deals(int $clientId): array
     $stmt = db()->prepare(
         'SELECT d.*, u.name AS owner_name
          FROM deals d
-         LEFT JOIN users u ON u.id = d.assigned_to
-         WHERE d.client_id = ? AND d.deleted_at IS NULL
+         LEFT JOIN users u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.client_id = ? AND d.deleted_at IS NULL
          ORDER BY FIELD(d.stage, "new_lead","contacted","proposal","negotiation","won","lost"), d.value DESC'
     );
-    $stmt->execute([$clientId]);
+    $stmt->execute([tenant_id(), $clientId]);
     return $stmt->fetchAll();
 }
 
@@ -175,9 +188,9 @@ function client_deals(int $clientId): array
 function client_count_assigned_to(int $userId): int
 {
     $stmt = db()->prepare(
-        'SELECT COUNT(*) FROM clients WHERE assigned_to = ? AND deleted_at IS NULL'
+        'SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND assigned_to = ? AND deleted_at IS NULL'
     );
-    $stmt->execute([$userId]);
+    $stmt->execute([tenant_id(), $userId]);
     return (int) $stmt->fetchColumn();
 }
 

@@ -11,15 +11,16 @@ function deal_board(?int $assignedTo = null): array
     $sql = 'SELECT d.*, c.company_name AS client_name, c.id AS client_id_ref,
                    l.lead_name, l.company AS lead_company, u.name AS owner_name
             FROM deals d
-            LEFT JOIN clients c ON c.id = d.client_id
-            LEFT JOIN leads   l ON l.id = d.lead_id
-             LEFT JOIN users   u ON u.id = d.assigned_to
-             WHERE d.deleted_at IS NULL
+            LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+            LEFT JOIN leads   l ON l.id = d.lead_id AND l.tenant_id = d.tenant_id
+             LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+             WHERE d.tenant_id = ?
+               AND d.deleted_at IS NULL
                -- A deal whose client or lead is in the bin is hidden with it,
                -- so the board never offers something that cannot be opened.
                AND (d.client_id IS NULL OR c.deleted_at IS NULL)
                AND (d.lead_id   IS NULL OR l.deleted_at IS NULL)';
-    $params = [];
+    $params = [tenant_id()];
 
     if ($assignedTo && $assignedTo > 0) {
         $sql .= ' AND d.assigned_to = ?';
@@ -41,10 +42,12 @@ function deal_board(?int $assignedTo = null): array
 /** Totals per stage for the board header. */
 function deal_stage_totals(): array
 {
-    $rows = db()->query(
+    $stmt = db()->prepare(
         'SELECT stage, COUNT(*) AS deal_count, COALESCE(SUM(value),0) AS total_value
-         FROM deals WHERE deleted_at IS NULL GROUP BY stage'
-    )->fetchAll();
+         FROM deals WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY stage'
+    );
+    $stmt->execute([tenant_id()]);
+    $rows = $stmt->fetchAll();
 
     $totals = [];
     foreach (deal_stages() as $stage) {
@@ -69,23 +72,24 @@ function deal_find(int $id): ?array
         'SELECT d.*, c.company_name AS client_name, l.lead_name, l.company AS lead_company,
                 u.name AS owner_name, cu.name AS creator_name
          FROM deals d
-         LEFT JOIN clients c  ON c.id = d.client_id
-         LEFT JOIN leads   l  ON l.id = d.lead_id
-         LEFT JOIN users   u  ON u.id = d.assigned_to
-         LEFT JOIN users   cu ON cu.id = d.created_by
-         WHERE d.id = ? AND d.deleted_at IS NULL LIMIT 1'
+         LEFT JOIN clients c  ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN leads   l  ON l.id = d.lead_id AND l.tenant_id = d.tenant_id
+         LEFT JOIN users   u  ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         LEFT JOIN users   cu ON cu.id = d.created_by AND cu.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.id = ? AND d.deleted_at IS NULL LIMIT 1'
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->fetch() ?: null;
 }
 
 function deal_create(array $data): int
 {
     $stmt = db()->prepare(
-        'INSERT INTO deals (deal_title, client_id, lead_id, value, stage, expected_close_date, assigned_to, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO deals (tenant_id, deal_title, client_id, lead_id, value, stage, expected_close_date, assigned_to, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
+        tenant_id(),
         $data['deal_title'],
         $data['client_id'] ?: null,
         $data['lead_id'] ?: null,
@@ -105,7 +109,7 @@ function deal_update(int $id, array $data): void
         'UPDATE deals
          SET deal_title = ?, client_id = ?, lead_id = ?, value = ?, stage = ?,
              expected_close_date = ?, assigned_to = ?, notes = ?
-         WHERE id = ?'
+         WHERE tenant_id = ? AND id = ?'
     );
     $stmt->execute([
         $data['deal_title'],
@@ -116,6 +120,7 @@ function deal_update(int $id, array $data): void
         null_if_empty($data['expected_close_date'] ?? null),
         $data['assigned_to'] ?: null,
         null_if_empty($data['notes'] ?? null),
+        tenant_id(),
         $id,
     ]);
 }
@@ -123,8 +128,8 @@ function deal_update(int $id, array $data): void
 /** Move a deal to another stage (pipeline drag action). */
 function deal_move(int $id, string $stage): void
 {
-    $stmt = db()->prepare('UPDATE deals SET stage = ? WHERE id = ? AND deleted_at IS NULL');
-    $stmt->execute([$stage, $id]);
+    $stmt = db()->prepare('UPDATE deals SET stage = ? WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL');
+    $stmt->execute([$stage, tenant_id(), $id]);
 }
 
 /** Stamp a deal as deleted. It keeps its row, value and history. */
@@ -142,48 +147,52 @@ function deal_restore(int $id): void
 function deal_count_open(): int
 {
     $stmt = db()->prepare(
-        'SELECT COUNT(*) FROM deals WHERE deleted_at IS NULL
+        'SELECT COUNT(*) FROM deals WHERE tenant_id = ? AND deleted_at IS NULL
          AND stage IN ("new_lead","contacted","proposal","negotiation")'
     );
-    $stmt->execute();
+    $stmt->execute([tenant_id()]);
     return (int) $stmt->fetchColumn();
 }
 
 function deal_count_won(): int
 {
-    $stmt = db()->prepare('SELECT COUNT(*) FROM deals WHERE deleted_at IS NULL AND stage = "won"');
-    $stmt->execute();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM deals WHERE tenant_id = ? AND deleted_at IS NULL AND stage = "won"');
+    $stmt->execute([tenant_id()]);
     return (int) $stmt->fetchColumn();
 }
 
 function deal_value_open(): float
 {
     $stmt = db()->prepare(
-        'SELECT COALESCE(SUM(value),0) FROM deals WHERE deleted_at IS NULL
+        'SELECT COALESCE(SUM(value),0) FROM deals WHERE tenant_id = ? AND deleted_at IS NULL
          AND stage IN ("new_lead","contacted","proposal","negotiation")'
     );
-    $stmt->execute();
+    $stmt->execute([tenant_id()]);
     return (float) $stmt->fetchColumn();
 }
 
 function deal_value_by_stage(): array
 {
-    return db()->query(
+    $stmt = db()->prepare(
         'SELECT stage, COUNT(*) AS deal_count, COALESCE(SUM(value),0) AS total_value
-         FROM deals WHERE deleted_at IS NULL GROUP BY stage'
-    )->fetchAll(PDO::FETCH_UNIQUE);
+         FROM deals WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY stage'
+    );
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll(PDO::FETCH_UNIQUE);
 }
 
 function deal_value_won_lost(): array
 {
-    $row = db()->query(
+    $stmt = db()->prepare(
         'SELECT
             COALESCE(SUM(CASE WHEN stage = "won"  THEN value END), 0) AS won_value,
             COALESCE(SUM(CASE WHEN stage = "lost" THEN value END), 0) AS lost_value,
             COALESCE(SUM(CASE WHEN stage = "won"  THEN 1 END), 0)      AS won_count,
             COALESCE(SUM(CASE WHEN stage = "lost" THEN 1 END), 0)      AS lost_count
-         FROM deals WHERE deleted_at IS NULL'
-    )->fetch();
+         FROM deals WHERE tenant_id = ? AND deleted_at IS NULL'
+    );
+    $stmt->execute([tenant_id()]);
+    $row = $stmt->fetch();
 
     return [
         'won_value'  => (float) $row['won_value'],
@@ -199,15 +208,16 @@ function deal_top_open(int $limit = 5): array
     $stmt = db()->prepare(
         'SELECT d.*, c.company_name AS client_name, u.name AS owner_name
          FROM deals d
-         LEFT JOIN clients c ON c.id = d.client_id
-         LEFT JOIN users   u ON u.id = d.assigned_to
-         WHERE d.deleted_at IS NULL
+         LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.deleted_at IS NULL
            AND d.stage IN ("new_lead","contacted","proposal","negotiation")
            AND (d.client_id IS NULL OR c.deleted_at IS NULL)
          ORDER BY d.value DESC
          LIMIT ?'
     );
-    $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll();
 }
@@ -218,15 +228,16 @@ function deal_won_list(int $limit = 10): array
     $stmt = db()->prepare(
         'SELECT d.*, c.company_name AS client_name, u.name AS owner_name
          FROM deals d
-         LEFT JOIN clients c ON c.id = d.client_id
-         LEFT JOIN users   u ON u.id = d.assigned_to
-         WHERE d.deleted_at IS NULL
+         LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.deleted_at IS NULL
            AND d.stage = "won"
            AND (d.client_id IS NULL OR c.deleted_at IS NULL)
          ORDER BY d.updated_at DESC
          LIMIT ?'
     );
-    $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll();
 }
@@ -237,12 +248,12 @@ function lead_deals(int $leadId): array
     $stmt = db()->prepare(
         'SELECT d.*, c.company_name AS client_name, u.name AS owner_name
          FROM deals d
-         LEFT JOIN clients c ON c.id = d.client_id
-         LEFT JOIN users   u ON u.id = d.assigned_to
-         WHERE d.lead_id = ? AND d.deleted_at IS NULL
+         LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
+         WHERE d.tenant_id = ? AND d.lead_id = ? AND d.deleted_at IS NULL
          ORDER BY d.created_at DESC'
     );
-    $stmt->execute([$leadId]);
+    $stmt->execute([tenant_id(), $leadId]);
     return $stmt->fetchAll();
 }
 

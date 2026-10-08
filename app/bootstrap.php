@@ -11,6 +11,7 @@ require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/list_page.php';
+require_once __DIR__ . '/tenancy.php';
 require_once __DIR__ . '/auth.php';
 
 /**
@@ -57,6 +58,7 @@ set_exception_handler(function (Throwable $e): void {
 require_once __DIR__ . '/models/ListQuery.php';
 require_once __DIR__ . '/models/SoftDeleteModel.php';
 require_once __DIR__ . '/models/LoginAttemptModel.php';
+require_once __DIR__ . '/models/TenantModel.php';
 require_once __DIR__ . '/models/UserModel.php';
 require_once __DIR__ . '/models/ClientModel.php';
 require_once __DIR__ . '/models/LeadModel.php';

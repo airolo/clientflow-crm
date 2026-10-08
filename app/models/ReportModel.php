@@ -32,9 +32,11 @@ function report_leads_created_in_days(int $days): int
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) FROM leads
-         WHERE deleted_at IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+         WHERE tenant_id = ? AND deleted_at IS NULL
+           AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
     );
-    $stmt->bindValue(1, $days, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $days, PDO::PARAM_INT);
     $stmt->execute();
     return (int) $stmt->fetchColumn();
 }
@@ -123,12 +125,13 @@ function report_monthly_activity(int $months = 6): array
                 SUM(type = "meeting") AS meetings,
                 SUM(type = "note")    AS notes
          FROM activities
-         WHERE deleted_at IS NULL
+         WHERE tenant_id = ? AND deleted_at IS NULL
            AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
          GROUP BY month
          ORDER BY month ASC'
     );
-    $stmt->bindValue(1, $months, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $months, PDO::PARAM_INT);
     $stmt->execute();
 
     $byMonth = [];
@@ -166,20 +169,24 @@ function report_monthly_growth(int $months = 6): array
         'SELECT month, SUM(clients) AS clients, SUM(leads) AS leads FROM (
             SELECT DATE_FORMAT(created_at, "%Y-%m") AS month, COUNT(*) AS clients, 0 AS leads
               FROM clients
-             WHERE deleted_at IS NULL
+             WHERE tenant_id = ? AND deleted_at IS NULL
                AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
              GROUP BY month
             UNION ALL
             SELECT DATE_FORMAT(created_at, "%Y-%m") AS month, 0 AS clients, COUNT(*) AS leads
               FROM leads
-             WHERE deleted_at IS NULL
+             WHERE tenant_id = ? AND deleted_at IS NULL
                AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), "%Y-%m-01")
              GROUP BY month
          ) combined
          GROUP BY month ORDER BY month ASC'
     );
-    $stmt->bindValue(1, $months, PDO::PARAM_INT);
+    // Positional binding: the tenant id is repeated because the clients and
+    // leads branches of the UNION are separate queries that only share a result set.
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
     $stmt->bindValue(2, $months, PDO::PARAM_INT);
+    $stmt->bindValue(3, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(4, $months, PDO::PARAM_INT);
     $stmt->execute();
 
     $byMonth = [];
@@ -234,26 +241,32 @@ function report_won_lost(): array
 /** Per-user performance table for the reports page. */
 function report_team_performance(): array
 {
-    return db()->query(
+    // Every correlated subquery carries d.tenant_id = u.tenant_id. Without it
+    // the counts would silently include other workspaces' records whenever two
+    // businesses happened to use the same user id - which they will, because
+    // ids are only unique per tenant.
+    $stmt = db()->prepare(
         'SELECT u.id, u.name, u.role,
-                (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.deleted_at IS NULL) AS leads,
-                (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id AND c.deleted_at IS NULL) AS clients,
+                (SELECT COUNT(*) FROM leads l WHERE l.tenant_id = u.tenant_id AND l.assigned_to = u.id AND l.deleted_at IS NULL) AS leads,
+                (SELECT COUNT(*) FROM clients c WHERE c.tenant_id = u.tenant_id AND c.assigned_to = u.id AND c.deleted_at IS NULL) AS clients,
                 (SELECT COUNT(*) FROM deals d
-                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL
+                   WHERE d.tenant_id = u.tenant_id AND d.assigned_to = u.id AND d.deleted_at IS NULL
                      AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_deals,
                 (SELECT COALESCE(SUM(d.value),0) FROM deals d
-                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL
+                   WHERE d.tenant_id = u.tenant_id AND d.assigned_to = u.id AND d.deleted_at IS NULL
                      AND d.stage IN ("new_lead","contacted","proposal","negotiation")) AS open_value,
                 (SELECT COUNT(*) FROM deals d
-                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_deals,
+                   WHERE d.tenant_id = u.tenant_id AND d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_deals,
                 (SELECT COALESCE(SUM(d.value),0) FROM deals d
-                   WHERE d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_value,
+                   WHERE d.tenant_id = u.tenant_id AND d.assigned_to = u.id AND d.deleted_at IS NULL AND d.stage = "won") AS won_value,
                 (SELECT COUNT(*) FROM tasks t
-                   WHERE t.assigned_to = u.id AND t.deleted_at IS NULL AND t.status = "completed") AS tasks_done
+                   WHERE t.tenant_id = u.tenant_id AND t.assigned_to = u.id AND t.deleted_at IS NULL AND t.status = "completed") AS tasks_done
          FROM users u
-         WHERE u.is_active = 1
+         WHERE u.tenant_id = ? AND u.is_active = 1
          ORDER BY won_value DESC, open_value DESC'
-    )->fetchAll();
+    );
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll();
 }
 
 /** Activity mix used by the reports page. */
@@ -276,15 +289,17 @@ function report_activity_mix(): array
 /** Clients by owner, for the reports page. */
 function report_clients_by_owner(): array
 {
-    return db()->query(
+    $stmt = db()->prepare(
         'SELECT COALESCE(u.name, "Unassigned") AS owner,
                 COUNT(c.id) AS total,
                 SUM(c.status = "active")   AS active,
                 SUM(c.status = "prospect") AS prospects
          FROM clients c
-         LEFT JOIN users u ON u.id = c.assigned_to
-         WHERE c.deleted_at IS NULL
+         LEFT JOIN users u ON u.id = c.assigned_to AND u.tenant_id = c.tenant_id
+         WHERE c.tenant_id = ? AND c.deleted_at IS NULL
          GROUP BY u.name
          ORDER BY total DESC'
-    )->fetchAll();
+    );
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll();
 }

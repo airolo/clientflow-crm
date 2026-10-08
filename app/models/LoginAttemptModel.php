@@ -30,13 +30,20 @@ function client_ip(): string
     return substr($ip, 0, 45);
 }
 
-/** Record an attempt, successful or not. */
-function login_attempt_record(string $email, bool $succeeded): void
+/**
+ * Record an attempt, successful or not.
+ *
+ * $tenantId is null when the workspace could not be resolved. Those rows are
+ * kept so that a run of guesses at made-up workspace names is still visible,
+ * and so the IP limit still has something to count.
+ */
+function login_attempt_record(?int $tenantId, string $email, bool $succeeded): void
 {
     $stmt = db()->prepare(
-        'INSERT INTO login_attempts (email, ip, succeeded, user_agent) VALUES (?, ?, ?, ?)'
+        'INSERT INTO login_attempts (tenant_id, email, ip, succeeded, user_agent) VALUES (?, ?, ?, ?, ?)'
     );
     $stmt->execute([
+        $tenantId,
         substr($email, 0, 150),
         client_ip(),
         $succeeded ? 1 : 0,
@@ -44,18 +51,25 @@ function login_attempt_record(string $email, bool $succeeded): void
     ]);
 }
 
-/** Failed attempts against one address in the current window. */
-function login_attempt_recent_failures_by_email(string $email): int
+/**
+ * Failed attempts against one account in the current window.
+ *
+ * Scoped to the tenant, not just the email: two businesses may both have an
+ * admin@company.com, and without this one workspace's repeated failures would
+ * throttle the other one's account.
+ */
+function login_attempt_recent_failures_by_email(?int $tenantId, string $email): int
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) FROM login_attempts
-         WHERE email = ? AND succeeded = 0 AND attempted_at > (NOW() - INTERVAL ? SECOND)'
+         WHERE tenant_id <=> ? AND email = ? AND succeeded = 0
+           AND attempted_at > (NOW() - INTERVAL ? SECOND)'
     );
-    $stmt->execute([substr($email, 0, 150), login_attempt_window()]);
+    $stmt->execute([$tenantId, substr($email, 0, 150), login_attempt_window()]);
     return (int) $stmt->fetchColumn();
 }
 
-/** Failed attempts from one IP in the current window. */
+/** Failed attempts from one IP in the current window. Deliberately not tenant-scoped. */
 function login_attempt_recent_failures_by_ip(string $ip): int
 {
     $stmt = db()->prepare(
@@ -67,26 +81,27 @@ function login_attempt_recent_failures_by_ip(string $ip): int
 }
 
 /**
- * True when this email or IP has exhausted its allowance.
+ * True when this account or IP has exhausted its allowance.
  *
  * Counted before the password is verified so that a run of guesses is refused
  * without doing any hash comparison.
  */
-function login_attempt_locked_out(string $email, string $ip): bool
+function login_attempt_locked_out(?int $tenantId, string $email, string $ip): bool
 {
-    return login_attempt_recent_failures_by_email($email) >= login_attempt_email_limit()
+    return login_attempt_recent_failures_by_email($tenantId, $email) >= login_attempt_email_limit()
         || login_attempt_recent_failures_by_ip($ip) >= login_attempt_ip_limit();
 }
 
-/** Seconds until the email's oldest failure ages out of the window. */
-function login_attempt_retry_seconds(string $email): int
+/** Seconds until the account's oldest failure ages out of the window. */
+function login_attempt_retry_seconds(?int $tenantId, string $email): int
 {
     $stmt = db()->prepare(
         'SELECT TIMESTAMPDIFF(SECOND, MIN(attempted_at), NOW()) AS age
          FROM login_attempts
-         WHERE email = ? AND succeeded = 0 AND attempted_at > (NOW() - INTERVAL ? SECOND)'
+         WHERE tenant_id <=> ? AND email = ? AND succeeded = 0
+           AND attempted_at > (NOW() - INTERVAL ? SECOND)'
     );
-    $stmt->execute([substr($email, 0, 150), login_attempt_window()]);
+    $stmt->execute([$tenantId, substr($email, 0, 150), login_attempt_window()]);
     $age = $stmt->fetchColumn();
     if ($age === false) {
         return 0;
@@ -95,13 +110,13 @@ function login_attempt_retry_seconds(string $email): int
 }
 
 /**
- * Clear the failure history for an email after a successful sign-in, so a
+ * Clear the failure history for an account after a successful sign-in, so a
  * genuine user who mistyped a few times is not left throttled.
  */
-function login_attempt_clear(string $email): void
+function login_attempt_clear(?int $tenantId, string $email): void
 {
-    $stmt = db()->prepare('DELETE FROM login_attempts WHERE email = ? AND succeeded = 0');
-    $stmt->execute([substr($email, 0, 150)]);
+    $stmt = db()->prepare('DELETE FROM login_attempts WHERE tenant_id <=> ? AND email = ? AND succeeded = 0');
+    $stmt->execute([$tenantId, substr($email, 0, 150)]);
 }
 
 /** Delete attempt rows older than the retention period. Keeps the table small. */

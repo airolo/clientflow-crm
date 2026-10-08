@@ -18,9 +18,9 @@ function activity_list(array $options = []): array
     return list_query([
         'select'  => 'a.*, c.company_name, l.lead_name, u.name AS owner_name',
         'from'    => 'FROM activities a
-                      LEFT JOIN clients c ON c.id = a.client_id
-                      LEFT JOIN leads   l ON l.id = a.lead_id
-                      LEFT JOIN users   u ON u.id = a.created_by',
+                      LEFT JOIN clients c ON c.id = a.client_id AND c.tenant_id = a.tenant_id
+                      LEFT JOIN leads   l ON l.id = a.lead_id AND l.tenant_id = a.tenant_id
+                      LEFT JOIN users   u ON u.id = a.created_by AND u.tenant_id = a.tenant_id',
         'search'  => ['a.title', 'a.details', 'c.company_name', 'l.lead_name'],
         'options' => $options,
         'filters' => [
@@ -42,6 +42,7 @@ function activity_list(array $options = []): array
         'sort'        => ['recent' => 'a.created_at'],
         'sort_default' => 'recent',
         'soft_delete' => ['a'],
+        'tenant'      => ['a'],
         // An activity whose client or lead has been deleted disappears with
         // it, so the history is never left dangling against a missing record.
         'where_extra' => [
@@ -56,22 +57,23 @@ function activity_find(int $id): ?array
     $stmt = db()->prepare(
         'SELECT a.*, c.company_name, l.lead_name, u.name AS owner_name
          FROM activities a
-         LEFT JOIN clients c ON c.id = a.client_id
-         LEFT JOIN leads   l ON l.id = a.lead_id
-         LEFT JOIN users   u ON u.id = a.created_by
-         WHERE a.id = ? AND a.deleted_at IS NULL LIMIT 1'
+         LEFT JOIN clients c ON c.id = a.client_id AND c.tenant_id = a.tenant_id
+         LEFT JOIN leads   l ON l.id = a.lead_id AND l.tenant_id = a.tenant_id
+         LEFT JOIN users   u ON u.id = a.created_by AND u.tenant_id = a.tenant_id
+         WHERE a.tenant_id = ? AND a.id = ? AND a.deleted_at IS NULL LIMIT 1'
     );
-    $stmt->execute([$id]);
+    $stmt->execute([tenant_id(), $id]);
     return $stmt->fetch() ?: null;
 }
 
 function activity_create(array $data): int
 {
     $stmt = db()->prepare(
-        'INSERT INTO activities (client_id, lead_id, type, title, details, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO activities (tenant_id, client_id, lead_id, type, title, details, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
+        tenant_id(),
         $data['client_id'] ?: null,
         $data['lead_id'] ?: null,
         $data['type'],
@@ -85,7 +87,8 @@ function activity_create(array $data): int
 function activity_update(int $id, array $data): void
 {
     $stmt = db()->prepare(
-        'UPDATE activities SET client_id = ?, lead_id = ?, type = ?, title = ?, details = ? WHERE id = ?'
+        'UPDATE activities SET client_id = ?, lead_id = ?, type = ?, title = ?, details = ?
+         WHERE tenant_id = ? AND id = ?'
     );
     $stmt->execute([
         $data['client_id'] ?: null,
@@ -93,6 +96,7 @@ function activity_update(int $id, array $data): void
         $data['type'],
         $data['title'],
         null_if_empty($data['details'] ?? null),
+        tenant_id(),
         $id,
     ]);
 }
@@ -126,18 +130,19 @@ function lead_activities(int $leadId, int $limit = 10): array
 function activity_recent(int $limit = 8): array
 {
     $stmt = db()->prepare(
-        'SELECT a.*, c.company_name, l.lead_name, l.company AS lead_company, u.name AS owner_name
+'SELECT a.*, c.company_name, l.lead_name, l.company AS lead_company, u.name AS owner_name
          FROM activities a
-         LEFT JOIN clients c ON c.id = a.client_id
-         LEFT JOIN leads   l ON l.id = a.lead_id
-         LEFT JOIN users   u ON u.id = a.created_by
-         WHERE a.deleted_at IS NULL
+         LEFT JOIN clients c ON c.id = a.client_id AND c.tenant_id = a.tenant_id
+         LEFT JOIN leads   l ON l.id = a.lead_id AND l.tenant_id = a.tenant_id
+         LEFT JOIN users   u ON u.id = a.created_by AND u.tenant_id = a.tenant_id
+         WHERE a.tenant_id = ? AND a.deleted_at IS NULL
            AND (a.client_id IS NULL OR c.deleted_at IS NULL)
            AND (a.lead_id   IS NULL OR l.deleted_at IS NULL)
          ORDER BY a.created_at DESC, a.id DESC
          LIMIT ?'
     );
-    $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+    $stmt->bindValue(1, tenant_id(), PDO::PARAM_INT);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll();
 }
@@ -145,13 +150,16 @@ function activity_recent(int $limit = 8): array
 /** Count per activity type (dashboard + reports). */
 function activity_count_by_type(): array
 {
-    return db()->query('SELECT type, COUNT(*) AS total FROM activities WHERE deleted_at IS NULL GROUP BY type')
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    $stmt = db()->prepare('SELECT type, COUNT(*) AS total FROM activities WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY type');
+    $stmt->execute([tenant_id()]);
+    return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
 function activity_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM activities WHERE deleted_at IS NULL')->fetchColumn();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM activities WHERE tenant_id = ? AND deleted_at IS NULL');
+    $stmt->execute([tenant_id()]);
+    return (int) $stmt->fetchColumn();
 }
 
 function activity_validate(array $data): array

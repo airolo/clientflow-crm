@@ -87,17 +87,23 @@ CREATE TABLE `users` (
 -- from one address or against one account can be counted and refused.
 -- Rows older than the retention window are pruned opportunistically.
 CREATE TABLE `login_attempts` (
-  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `email`        VARCHAR(150) NOT NULL,
-  `ip`           VARCHAR(45) NOT NULL,
-  `succeeded`    TINYINT(1) NOT NULL DEFAULT 0,
-  `user_agent`   VARCHAR(255) DEFAULT NULL,
-  `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_attempts_email_time` (`email`, `attempted_at`),
-  KEY `idx_attempts_ip_time`    (`ip`, `attempted_at`),
-  KEY `idx_attempts_time`       (`attempted_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `tenant_id`    INT UNSIGNED DEFAULT NULL,
+    `email`        VARCHAR(150) NOT NULL,
+    `ip`           VARCHAR(45) NOT NULL,
+    `succeeded`    TINYINT(1) NOT NULL DEFAULT 0,
+    `user_agent`   VARCHAR(255) DEFAULT NULL,
+    `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    -- Keyed by tenant as well as email: two businesses may both have an
+    -- admin@company.com, and one workspace's failed guesses must not lock the
+    -- other one's account out. No foreign key - failures against an unknown
+    -- workspace are still recorded, with tenant_id left null.
+    KEY `idx_attempts_tenant_email_time` (`tenant_id`, `email`, `attempted_at`),
+    KEY `idx_attempts_email_time` (`email`, `attempted_at`),
+    KEY `idx_attempts_ip_time`    (`ip`, `attempted_at`),
+    KEY `idx_attempts_time`       (`attempted_at`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- =============================================================

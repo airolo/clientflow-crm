@@ -71,26 +71,45 @@ function is_admin(): bool
 
 /**
  * Attempt a login. Returns an error string on failure, or null on success.
+ *
+ * Takes the workspace slug as well as the email, because two businesses may
+ * legitimately both have an admin@company.com and their accounts are separate.
  */
-function attempt_login(string $email, string $password): ?string
+function attempt_login(string $tenantSlug, string $email, string $password): ?string
 {
-    $ip = client_ip();
+    $ip     = client_ip();
+    $tenant = tenant_find_by_slug($tenantSlug);
 
     // Throttling is checked before any hash comparison, so a run of guesses
-    // against one account or from one address stops being expensive.
-    if (login_attempt_locked_out($email, $ip)) {
-        $minutes = max(1, (int) ceil(login_attempt_retry_seconds($email) / 60));
+    // against one account or from one address stops being expensive. Keyed on
+    // the resolved tenant, or null when the workspace is unknown.
+    $tenantId = $tenant ? (int) $tenant['id'] : null;
+    if (login_attempt_locked_out($tenantId, $email, $ip)) {
+        $minutes = max(1, (int) ceil(login_attempt_retry_seconds($tenantId, $email) / 60));
         return 'Too many failed sign-in attempts. Try again in about '
             . $minutes . ' minute' . ($minutes === 1 ? '' : 's') . '.';
     }
 
-    $stmt = db()->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
-    $stmt->execute([$email]);
+    if (!$tenant) {
+        // Recorded against no tenant. The message is deliberately the same one
+        // used for a wrong password, so the form cannot be used to discover
+        // which workspace slugs exist.
+        login_attempt_record(null, $email, false);
+        login_attempt_prune();
+        return 'Those credentials do not match our records.';
+    }
+
+    if ($tenant['status'] !== 'active') {
+        return 'This workspace has been suspended. Please contact support.';
+    }
+
+    $stmt = db()->prepare('SELECT * FROM users WHERE tenant_id = ? AND email = ? LIMIT 1');
+    $stmt->execute([(int) $tenant['id'], $email]);
     $user = $stmt->fetch();
 
     // Same generic message for unknown email and wrong password.
     if (!$user || !password_verify($password, (string) $user['password_hash'])) {
-        login_attempt_record($email, false);
+        login_attempt_record($tenantId, $email, false);
         login_attempt_prune();
         return 'Those credentials do not match our records.';
     }
@@ -98,12 +117,12 @@ function attempt_login(string $email, string $password): ?string
         // Recorded, but the failure counter is deliberately not incremented:
         // the password was correct, and an attacker should not be able to use
         // this path to lock a real account out of its own login.
-        login_attempt_record($email, false);
+        login_attempt_record($tenantId, $email, false);
         return 'This account has been deactivated. Please contact an administrator.';
     }
 
-    login_attempt_record($email, true);
-    login_attempt_clear($email);
+    login_attempt_record($tenantId, $email, true);
+    login_attempt_clear($tenantId, $email);
 
     // New session id on privilege change (session fixation protection).
     session_regenerate_id(true);
@@ -114,6 +133,10 @@ function attempt_login(string $email, string $password): ?string
         'email' => $user['email'],
         'role'  => $user['role'],
     ];
+    // Every query filters on this. Set from the row we just verified, never
+    // from the form, so it cannot be pointed at another workspace.
+    $_SESSION['tenant_id'] = (int) $tenant['id'];
+    tenant_cache_reset();
     // Carried from the database rather than trusted from the form, so the
     // forced-change redirect cannot be bypassed by posting a different value.
     $_SESSION['must_change_password'] = (int) ($user['must_change_password'] ?? 0) === 1;
@@ -162,6 +185,11 @@ function require_login(): void
         flash('warning', 'Please sign in to continue.');
         redirect('login.php');
     }
+
+    // Re-checks the workspace still exists and is not suspended. A tenant
+    // suspended mid-session is signed out here rather than kept working until
+    // the idle timeout.
+    require_active_tenant();
 
     if (must_change_password()) {
         $here = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));

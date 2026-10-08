@@ -81,6 +81,13 @@ CALL `cf_add_column`('deals',      'tenant_id', 'INT UNSIGNED DEFAULT NULL');
 CALL `cf_add_column`('tasks',      'tenant_id', 'INT UNSIGNED DEFAULT NULL');
 CALL `cf_add_column`('activities', 'tenant_id', 'INT UNSIGNED DEFAULT NULL');
 
+-- Login throttling is keyed on email, and two businesses may share an email
+-- address. tenant_id is added so one workspace's failed guesses cannot lock
+-- another workspace's account out. Nullable with no foreign key on purpose:
+-- failures against an unknown workspace are still recorded, and an unresolvable
+-- workspace must not be able to insert a bogus tenant_id.
+CALL `cf_add_column`('login_attempts', 'tenant_id', 'INT UNSIGNED DEFAULT NULL');
+
 -- Everything that already exists belongs to tenant 1.
 UPDATE `users`      SET `tenant_id` = 1 WHERE `tenant_id` IS NULL;
 UPDATE `clients`    SET `tenant_id` = 1 WHERE `tenant_id` IS NULL;
@@ -107,6 +114,7 @@ CALL `cf_add_index`('leads',      'idx_leads_tenant_deleted',   '(`tenant_id`, `
 CALL `cf_add_index`('deals',      'idx_deals_tenant_deleted',   '(`tenant_id`, `deleted_at`)');
 CALL `cf_add_index`('tasks',      'idx_tasks_tenant_deleted',   '(`tenant_id`, `deleted_at`)');
 CALL `cf_add_index`('activities', 'idx_activities_tenant_deleted', '(`tenant_id`, `deleted_at`)');
+CALL `cf_add_index`('login_attempts', 'idx_attempts_tenant_email_time', '(`tenant_id`, `email`, `attempted_at`)');
 
 -- The old single-column indexes are redundant now, but dropping an index that
 -- may already be renamed would break a re-run, so they are left alone if
