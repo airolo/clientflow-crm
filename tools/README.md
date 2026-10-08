@@ -231,6 +231,66 @@ discarded an entire response body. It was removed rather than tested for,
 because a no-op has no observable behaviour to assert on. Defence is removal,
 not a regression test.
 
+## import_test.ps1
+
+62 assertions over the CSV import flow, for clients and leads.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\import_test.ps1
+```
+
+Import is the only path that writes many rows from data the app did not
+create, so this is where the correctness work lives. Checked in order of how
+badly each one would hurt:
+
+- **Nothing is written before confirmation.** Upload shows a plan and the
+  database is unchanged; only the confirm step writes.
+- **A plan cannot be replayed**, so a reload cannot import twice.
+- **Cross-tenant.** B confirming a plan A built imports nothing. This is the
+  same class of bug as trusting a tenant id from a form.
+- **A plan for clients cannot be committed as leads.**
+- **Bad rows are skipped and reported**, not fatal and not silent.
+- **Duplicates** are detected, skipped by default, and importable on request.
+- **Real-world files:** semicolon delimiter, UTF-8 BOM, CRLF, `GBP1,234.56`.
+- **Whole-file failures:** missing required column, headers only, empty file.
+- **Staff can import** into their own workspace, and imported rows behave
+  exactly like typed ones.
+- **Round trip:** the app's own export headers are importable unchanged.
+
+Verified by breaking it on purpose: removing the money assignment fails 1
+assertion, and making the upload write before the review step fails 3.
+
+### The PowerShell trap that made half of these assertions vacuous
+
+```powershell
+Check 'nothing was written' (Count-Where "...") -eq 0
+```
+
+does **not** test what it looks like. PowerShell coerces the parenthesised
+value to `[bool]` when binding the argument, so `-eq 0` is never evaluated —
+every such assertion was only testing "non-zero". It passes for `-eq 1`
+assertions by accident and fails for `-eq 0` ones, which reads like an app
+bug. Reproduced outside the app in three lines.
+
+The fix is to put the whole comparison inside the parens:
+
+```powershell
+Check 'nothing was written' ((Count-Where "...") -eq 0)
+```
+
+The other suites were already correct because they wrote `([int](Sql "...") -eq 0)`.
+
+Two more traps this suite hit, both of which made the *test* wrong rather than
+the app:
+
+- **The CSRF token must come from the page you are about to post to.** The
+  app issues one per rendered form, so the token captured at sign-in is stale.
+- **Keep the query string when fetching that page.** `import.php` stages a
+  plan per record type and discards it when loaded with a different `type=`,
+  so stripping `?type=lead` before fetching the token threw the staged plan
+  away and the confirm step silently did nothing.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in

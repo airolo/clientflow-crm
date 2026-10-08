@@ -14,6 +14,7 @@ never requests them.
 | `bootstrap.php` | The single entry point. Every page requires this and nothing else. Loads config → database → helpers → models, installs the exception handler, starts the session |
 | `auth.php` | Session hardening, `attempt_login()` (workspace + email + password, with throttling), `logout_user()`, `require_login()` (with the forced password change), `require_admin()`, `can_manage()`, `can_view()` |
 | `tenancy.php` | Which workspace the request belongs to: `tenant_current()`, `tenant_id()`, `require_active_tenant()` |
+| `csv.php` | CSV output: `csv_formula_safe()`, `csv_send_headers()`, `csv_export_filename()` |
 | `functions.php` | Output escaping, flash messages, CSRF, length validation, badges, pagination, formatting, `url()` |
 | `list_page.php` | `render_filter_bar()`, `render_th()`, `render_post_form_open()`, `render_table_footer()`, `render_list_empty_state()`, `render_page_actions()` |
 | `config/config.php` | Constants: database credentials, app name, timezone, `APP_URL`, `DEMO_MODE` |

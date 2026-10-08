@@ -287,6 +287,7 @@ ClientFlow/
 │   ├── isolation_test.ps1        # 123 checks across two live workspaces
 │   ├── settings_test.ps1         # 43 checks for per-workspace settings
 │   ├── export_test.ps1           # 53 checks for CSV export
+│   ├── import_test.ps1           # 62 checks for CSV import
 │   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -859,6 +860,43 @@ Two decisions worth knowing:
 Staff can export. The list screens already show staff every email and phone in the workspace, so an
 export grants nothing they could not read by paging through it; restricting it would be inconsistent.
 If you want exports to be narrower than the list, `export.php` is the single place to change.
+
+### CSV import
+
+`import.php?type=client|lead`, with a button on both list screens. Import is the only path in the
+app that writes many rows from data the app did not create, so it is built around three rules.
+
+**Nothing is written until you have seen the plan.** Uploading parses and validates and shows what
+would happen — how many rows will be created, which look like records you already have, and what is
+wrong with each row that failed — before a single `INSERT` runs. The plan is held in the session and
+is single-use, so reloading the page cannot import twice. It carries the workspace and user it was
+built for, so a plan made in one workspace cannot be confirmed in another.
+
+**One transaction**, with per-row failures recorded rather than fatal. Four hundred rows do not fail
+because of one bad row, and nothing is left half-written.
+
+**The tenant comes from the session and `created_by` from the signed-in user.** The file has no say
+in either.
+
+Header names are matched loosely against per-field aliases, so `Company Name`, `company_name` and
+`COMPANY_NAME` all work, and the app's own export re-imports unchanged. Columns it does not recognise
+are *reported* rather than silently dropped — someone who exported a column and re-imported it
+expecting it to land needs to be told it did not.
+
+Real-world files are handled rather than assumed away:
+
+- **Delimiter is detected.** A semicolon file is what Excel writes for a European locale, and this
+  app offers EUR, PLN and BRL in its currency list.
+- **A UTF-8 BOM** before the first header is stripped, so `Company` is still recognised.
+- **Money** is read from `GBP1,234.56` and similar.
+- **An unknown `assigned to`** is a warning and the row imports unassigned — refusing a customer over
+  an owner is unhelpful.
+- **An unknown status is an error**, not a guess. Silently mapping `In Progress` onto `contacted`
+  would corrupt someone's pipeline.
+
+Rows with errors are skipped and listed on the review screen rather than stopping the whole file.
+Duplicates are detected by email, or by name where there is no email, and skipped unless you tick a
+box asking for them.
 
 ### Adding a model function
 
