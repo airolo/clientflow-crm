@@ -486,14 +486,34 @@ deliberate: a public page that is indexed, cached or scraped must not be able to
 customer's name, and "it does not query the database" is a guarantee rather than a review item.
 
 **It claims only what the app does.** The Integrations tab is split into what ships and a
-*Not built yet* list, and the FAQ answers the awkward ones directly — including the two that cost
-it sales: there is no hosted version, so you host it yourself, and there is no company behind it,
-no support desk and no SLA. A CRM that lists integrations it does not have is worse than one that
-admits it, and the repo is public enough that anyone can check.
+*Not built yet* list, and the FAQ answers the awkward ones directly — including that there is no
+subscription and no vendor behind it. A CRM that lists integrations it does not have is worse than
+one that admits it, and the repo is public enough that anyone can check.
 
-Warmth is not a licence to soften those. The two limits most likely to talk someone out of buying
-are both stated plainly in the FAQ, because someone who finds them after committing their customer
-list stops trusting everything else on the page.
+Warmth is not a licence to soften those. The limit most likely to talk someone out of using it is
+stated plainly, and someone who finds it after committing their customer list stops trusting
+everything else on the page.
+
+**The Get Started section teaches account creation, and that forced a correction.** The four steps
+are *create your workspace → add your first client → set your currency and timezone → add your
+team* — deliberately the same path `welcome.php` walks a new user through, so the landing page and
+the product's own onboarding do not describe two different products.
+
+Choosing that framing made the previous FAQ answer false. It read *"There is no hosted version of
+ClientFlow to sign up for"*, which was true while the page was aimed at developers and stops being
+true the moment this is deployed, because `signup.php` genuinely does let a visitor create a
+workspace on a running instance — which is what the new section tells them to do. The page
+contradicted itself in two places. It now says the true thing: this is software you run yourself
+rather than a service we sell, and on a running instance you can create a workspace in about a
+minute and become its first admin.
+
+**The CTAs were incoherent and are now consolidated.** The navbar previously had a *Create
+workspace* button, a *Get started* button, and a nav link labelled *Run it yourself* — two of them
+pointing at the same anchor under different names, and the hero repeating it. Now: hero offers *Get
+Started* (scrolls to the section) and *Sign in*; the navbar offers *Sign in* and *Create workspace*;
+one *Create a workspace* button sits at the foot of the Get Started section pointing at `signup.php`.
+The cost is that the primary call to action no longer goes straight to signup — it is two clicks.
+That is inherent to putting the steps ahead of the button.
 
 **Two stale claims were removed in that rewrite**, and both had been sitting there while the
 features they denied existed:

@@ -147,10 +147,10 @@ $stackPlanned = [
 $faq = [
     [
         'q' => 'Do I have to host this somewhere myself?',
-        'a' => 'Yes. There is no hosted version of ClientFlow to sign up for - you put it on a web
-                server you control, and your customer data stays there. That is the trade: nobody else
-                holds your list, and you are the one responsible for backups. If you would rather not
-                run a server at all, this is the wrong tool for you.',
+        'a' => 'ClientFlow is software you run yourself, not a service we sell you &mdash; there is
+                no subscription and no vendor behind it. On a running instance, though, creating a
+                workspace takes about a minute: you become its first admin and you are signed in
+                straight away. Running it, and backing it up, is your responsibility.',
     ],
     [
         'q' => 'Can I get my data out?',
@@ -256,7 +256,7 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
             <a href="#features">Features</a>
             <a href="#preview">Preview</a>
             <a href="#workflow">How it works</a>
-            <a href="#setup">Run it yourself</a>
+            <a href="#setup">Get Started</a>
             <a href="#faq">FAQ</a>
         </nav>
         <div class="d-flex gap-2 ms-md-0 ms-auto">
@@ -267,7 +267,6 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
             <?php else: ?>
                 <a class="btn btn-outline-secondary btn-sm px-3" href="<?= e(url('auth/login.php')) ?>">Sign in</a>
                 <a class="btn btn-primary btn-sm px-3" href="<?= e(url('signup.php')) ?>">Create workspace</a>
-                <a class="btn btn-outline-secondary btn-sm px-3 d-none d-sm-inline-block" href="#setup">Get started</a>
             <?php endif; ?>
         </div>
     </div>
@@ -298,13 +297,12 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
                             <i class="bi bi-speedometer2 me-2"></i>Open the dashboard
                         </a>
                     <?php else: ?>
-                        <a class="btn btn-primary btn-lg px-4" href="<?= e(url('signup.php')) ?>">
-                            <i class="bi bi-building-add me-2"></i>Create a workspace
+                        <a class="btn btn-primary btn-lg px-4" href="#setup">
+                            <i class="bi bi-rocket-takeoff me-2"></i>Get Started
                         </a>
                         <a class="btn btn-outline-secondary btn-lg px-4" href="<?= e(url('auth/login.php')) ?>">
                             <i class="bi bi-box-arrow-in-right me-2"></i>Sign in
                         </a>
-                        <a class="btn btn-outline-secondary btn-lg px-4" href="#setup">Run it yourself</a>
                     <?php endif; ?>
                 </div>
                 <p class="lp-fine mb-0">
@@ -595,48 +593,54 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
         <div class="row justify-content-center">
             <div class="col-lg-8">
                 <div class="text-center mb-4">
-                    <h2 class="lp-h2">Running it yourself</h2>
+                    <h2 class="lp-h2">Get Started</h2>
                     <p class="lp-sub">
-                        Four steps on any ordinary LAMP host. On a local machine, that is XAMPP.
+                        Four steps from an empty workspace to one you are actually working in.
                     </p>
                 </div>
 
                 <ol class="lp-setup">
                     <li>
-                        <h3>Start Apache and MySQL</h3>
-                        <p>Open the XAMPP control panel and start both. On a real host, anything
-                           that runs PHP and MySQL will do.</p>
-                    </li>
-                    <li>
-                        <h3>Copy the project into <code>htdocs</code></h3>
-                        <p>Put the folder at <code>htdocs/clientflow</code>, or rename it and move
-                           it - every internal link is generated, so nothing breaks.</p>
-                    </li>
-                    <li>
-                        <h3>Import the database</h3>
-                        <p>phpMyAdmin &rarr; Import &rarr; <code>database.sql</code>. It creates the
-                           tables and loads a small fictional sample set to look around at.</p>
-                    </li>
-                    <li>
                         <h3>Create your workspace</h3>
-                        <p>Go to <a href="<?= e(url('signup.php')) ?>">create a workspace</a> and
-                           register your business - anyone with the link can do this on your
-                           instance. Or sign in to the demo accounts on the
-                           <a href="<?= e(url('auth/login.php')) ?>">sign-in page</a>; each one asks
-                           you to choose its own password first.</p>
+                        <p>Give your business a name and pick an email and password. The workspace
+                           address is worked out from the business name, or set it yourself if you
+                           would rather. You become its first admin.</p>
+                    </li>
+                    <li>
+                        <h3>Add your first client</h3>
+                        <p>You land on a short welcome that walks you through it. Already have a
+                           spreadsheet? Upload a CSV instead &mdash; you get a review screen first,
+                           showing what would be created and what looks like a duplicate, and nothing
+                           saves until you say so.</p>
+                    </li>
+                    <li>
+                        <h3>Set your currency and timezone</h3>
+                        <p>One setting each, and money and dates then read the way you work rather
+                           than the server's idea of them.</p>
+                    </li>
+                    <li>
+                        <h3>Add your team</h3>
+                        <p>Admins see and edit everything. Staff are limited to the records they
+                           created or are assigned to, and your shared lists and reports stay
+                           shared.</p>
                     </li>
                 </ol>
 
                 <div class="lp-callout mt-4">
                     <i class="bi bi-exclamation-triangle-fill"></i>
                     <div>
-                        <strong>Before you use this with real data.</strong> Take a backup first with
-                        <code>tools/backup.ps1</code>. <code>database.sql</code> begins with
-                        <code>DROP TABLE</code>, so re-importing it erases everything. The in-app
-                        exports give you your records, but a backup is what protects you if the
-                        database itself is the thing that goes wrong.
+                        <strong>One thing before your first import.</strong>
+                        <code>database.sql</code> opens with <code>DROP TABLE</code>, so importing it
+                        over an existing workspace erases everything in it. The in-app exports get
+                        your records out, but if you are about to re-import anything, take a proper
+                        backup first with <code>tools/backup.ps1</code>.
                     </div>
                 </div>
+
+                <p class="lp-fine text-center mt-4 mb-3">
+                    Nothing is charged, and nothing is emailed to you &mdash; you are signed in
+                    straight away.
+                </p>
 
                 <div class="text-center mt-4">
                     <a class="btn btn-primary btn-lg px-4" href="<?= e(url('signup.php')) ?>">
