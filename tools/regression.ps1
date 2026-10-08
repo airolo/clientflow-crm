@@ -161,6 +161,16 @@ $TestHash = '$2y$10$aTWww8OncS5sYUl7TAqNe.hdpKGyghs8CdZ1y242gPsvwz/iyBXju'
 $AdminEmail = 'regression-admin@clientflow.test'
 $StaffEmail = 'regression-staff@clientflow.test'
 
+# Sign-in is workspace + email, so the suite has to know which workspace it is
+# signing in to. Tenant 1 is the demo workspace in database.sql.
+$TenantId   = [int](Invoke-Sql "SELECT id FROM tenants ORDER BY id LIMIT 1;")
+$TenantSlug = [string](Invoke-Sql "SELECT slug FROM tenants ORDER BY id LIMIT 1;")
+if ($TenantId -le 0 -or [string]::IsNullOrWhiteSpace($TenantSlug)) {
+    Write-Output 'ABORT: no tenant exists. Import database.sql or run migrations/003_multi_tenancy.sql first.'
+    exit 1
+}
+Write-Output "  workspace under test: $TenantSlug (tenant $TenantId)"
+
 # Sweep anything a previous aborted run left behind, BEFORE the baseline is
 # captured. Otherwise a leftover row is counted as part of the baseline, and
 # the cleanup at the end removes it - which fails the "counts restored" check
@@ -194,9 +204,9 @@ $seededUsersBefore = Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',role,':',is_a
                                   FROM users WHERE id IN (1,2,3,4);"
 
 Invoke-Sql "DELETE FROM users WHERE email IN ('$AdminEmail', '$StaffEmail');
-            INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
-            VALUES ('Regression Admin', '$AdminEmail', '$TestHash', 'admin', NULL, 1, 0),
-                   ('Regression Staff', '$StaffEmail', '$TestHash', 'staff', NULL, 1, 0);" | Out-Null
+            INSERT INTO users (tenant_id, name, email, password_hash, role, phone, is_active, must_change_password)
+            VALUES ($TenantId, 'Regression Admin', '$AdminEmail', '$TestHash', 'admin', NULL, 1, 0),
+                   ($TenantId, 'Regression Staff', '$StaffEmail', '$TestHash', 'staff', NULL, 1, 0);" | Out-Null
 
 $AdminId = [int](Invoke-Sql "SELECT id FROM users WHERE email = '$AdminEmail';")
 $StaffId = [int](Invoke-Sql "SELECT id FROM users WHERE email = '$StaffEmail';")
@@ -211,10 +221,10 @@ if ($AdminId -le 0 -or $StaffId -le 0) {
 # now blocks seeded detail pages, so it cannot borrow client 1 any more.
 Invoke-Sql "DELETE FROM clients WHERE company_name = 'Regression OwnedByStaff';
             DELETE FROM leads   WHERE lead_name    = 'Regression LeadForStaff';
-            INSERT INTO clients (company_name, contact_person, status, assigned_to, created_by)
-            VALUES ('Regression OwnedByStaff', 'Staff Contact', 'prospect', $StaffId, $AdminId);
-            INSERT INTO leads (lead_name, lead_source, status, estimated_value, assigned_to, created_by)
-            VALUES ('Regression LeadForStaff', 'website', 'new', 10, $StaffId, $AdminId);" | Out-Null
+            INSERT INTO clients (tenant_id, company_name, contact_person, status, assigned_to, created_by)
+             VALUES ($TenantId, 'Regression OwnedByStaff', 'Staff Contact', 'prospect', $StaffId, $AdminId);
+            INSERT INTO leads (tenant_id, lead_name, lead_source, status, estimated_value, assigned_to, created_by)
+            VALUES ($TenantId, 'Regression LeadForStaff', 'website', 'new', 10, $StaffId, $AdminId);" | Out-Null
 
 $StaffFixtureClient = [int](Invoke-Sql "SELECT id FROM clients WHERE company_name='Regression OwnedByStaff' LIMIT 1;")
 $StaffFixtureLead   = [int](Invoke-Sql "SELECT id FROM leads WHERE lead_name='Regression LeadForStaff' LIMIT 1;")
@@ -226,7 +236,7 @@ if ($StaffFixtureClient -le 0 -or $StaffFixtureLead -le 0) {
 $admin = New-Object System.Net.CookieContainer
 $adminLogin = Invoke-App 'POST' 'auth/login.php' $admin @{
     _token = (Get-Token 'auth/login.php' $admin)
-    email = $AdminEmail; password = $TestPass
+    workspace = $TenantSlug; email = $AdminEmail; password = $TestPass
 }
 if ($adminLogin.Location -notmatch 'dashboard\.php$') {
     Write-Output "ABORT: admin login failed (got '$($adminLogin.Location)')"
@@ -236,7 +246,7 @@ if ($adminLogin.Location -notmatch 'dashboard\.php$') {
 $staff = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $staff @{
     _token = (Get-Token 'auth/login.php' $staff)
-    email = $StaffEmail; password = $TestPass
+    workspace = $TenantSlug; email = $StaffEmail; password = $TestPass
 } | Out-Null
 
 # ---------------------------------------------------------------- 1. assets
@@ -435,12 +445,12 @@ foreach ($page in @('dashboard.php', 'clients/index.php', 'leads/index.php', 'pi
 }
 $bad = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $bad @{
-    _token = (Get-Token 'auth/login.php' $bad); email = $AdminEmail; password = 'nope'
+    _token = (Get-Token 'auth/login.php' $bad); workspace = $TenantSlug; email = $AdminEmail; password = 'nope'
 } | Out-Null
 Assert 'wrong password generic error' ((Invoke-App 'GET' 'auth/login.php' $bad).Body -match 'do not match our records')
 $unknown = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $unknown @{
-    _token = (Get-Token 'auth/login.php' $unknown); email = 'nobody@nowhere.test'; password = 'x'
+    _token = (Get-Token 'auth/login.php' $unknown); workspace = $TenantSlug; email = 'nobody@nowhere.test'; password = 'x'
 } | Out-Null
 Assert 'unknown email same error (no enumeration)' ((Invoke-App 'GET' 'auth/login.php' $unknown).Body -match 'do not match our records')
 
@@ -450,13 +460,13 @@ Section 'Forced password change'
 # Its own throwaway account, flagged so it is held at the change-password screen.
 # The hash is the suite's test hash, so nothing here depends on a seeded password.
 Invoke-Sql "DELETE FROM users WHERE email = 'forced@regression.test';
-            INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
-            VALUES ('Forced Regression', 'forced@regression.test', '$TestHash', 'staff', NULL, 1, 1);" | Out-Null
+INSERT INTO users (tenant_id, name, email, password_hash, role, phone, is_active, must_change_password)
+             VALUES ($TenantId, 'Forced Regression', 'forced@regression.test', '$TestHash', 'staff', NULL, 1, 1);" | Out-Null
 
 $forced = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $forced @{
     _token = (Get-Token 'auth/login.php' $forced)
-    email = 'forced@regression.test'; password = $TestPass
+    workspace = $TenantSlug; email = 'forced@regression.test'; password = $TestPass
 } | Out-Null
 
 Assert 'flagged account lands on change_password' (
@@ -489,7 +499,7 @@ Assert 'dashboard now reachable' ((Invoke-App 'GET' 'dashboard.php' $forced).Cod
 $oldPw = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $oldPw @{
     _token = (Get-Token 'auth/login.php' $oldPw)
-    email = 'forced@regression.test'; password = $TestPass
+    workspace = $TenantSlug; email = 'forced@regression.test'; password = $TestPass
 } | Out-Null
 Assert 'the old password no longer signs in' (
     (Invoke-App 'GET' 'auth/login.php' $oldPw).Body -match 'do not match our records')
@@ -505,7 +515,7 @@ Invoke-Sql "DELETE FROM login_attempts;" | Out-Null
 function Try-SignIn([string]$Email, [string]$Password) {
     $s = New-Object System.Net.CookieContainer
     Invoke-App 'POST' 'auth/login.php' $s @{
-        _token = (Get-Token 'auth/login.php' $s); email = $Email; password = $Password
+        _token = (Get-Token 'auth/login.php' $s); workspace = $TenantSlug; email = $Email; password = $Password
     } | Out-Null
     return (Invoke-App 'GET' 'auth/login.php' $s).Body
 }
@@ -526,7 +536,7 @@ Invoke-Sql "DELETE FROM login_attempts;" | Out-Null
 $good = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $good @{
     _token = (Get-Token 'auth/login.php' $good)
-    email = $AdminEmail; password = $TestPass
+    workspace = $TenantSlug; email = $AdminEmail; password = $TestPass
 } | Out-Null
 Assert 'successful sign-in is logged' (
     [int](Invoke-Sql "SELECT COUNT(*) FROM login_attempts WHERE email='$AdminEmail' AND succeeded=1;") -ge 1)

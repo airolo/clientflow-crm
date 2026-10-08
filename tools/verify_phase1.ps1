@@ -77,11 +77,20 @@ $V1Hash   = '$2y$10$aTWww8OncS5sYUl7TAqNe.hdpKGyghs8CdZ1y242gPsvwz/iyBXju'
 $V1Plain  = 'verify-admin@regression.test'    # not flagged, so it reaches the app
 $V1Forced = 'verify-forced@regression.test'  # flagged, so it is held at the change screen
 
+# Sign-in is workspace + email, so these accounts have to live in a workspace and
+# every sign-in below has to name it.
+$V1TenantId = Sql "USE clientflow_crm; SELECT id FROM tenants ORDER BY id LIMIT 1;"
+$V1Slug     = Sql "USE clientflow_crm; SELECT slug FROM tenants ORDER BY id LIMIT 1;"
+if ([string]::IsNullOrWhiteSpace($V1Slug)) {
+    Write-Output 'ABORT: no tenant exists. Import database.sql or run migrations/003_multi_tenancy.sql first.'
+    exit 1
+}
+
 Sql "USE clientflow_crm;
      DELETE FROM users WHERE email IN ('$V1Plain', '$V1Forced');
-     INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
-     VALUES ('Verify Plain', '$V1Plain', '$V1Hash', 'staff', NULL, 1, 0),
-            ('Verify Forced', '$V1Forced', '$V1Hash', 'staff', NULL, 1, 1);" | Out-Null
+     INSERT INTO users (tenant_id, name, email, password_hash, role, phone, is_active, must_change_password)
+     VALUES ($V1TenantId, 'Verify Plain', '$V1Plain', '$V1Hash', 'staff', NULL, 1, 0),
+            ($V1TenantId, 'Verify Forced', '$V1Forced', '$V1Hash', 'staff', NULL, 1, 1);" | Out-Null
 Check 'throwaway accounts created' (
     (Sql "USE clientflow_crm; SELECT COUNT(*) FROM users WHERE email IN ('$V1Plain','$V1Forced');") -eq '2')
 
@@ -91,7 +100,7 @@ Check "same page with a non-loopback Host hides demo creds" (-not ($remote.Conte
 
 Write-Output "`n=== 2. Forced password change ==="
 $ctx = New-Session
-$r = Post $ctx 'auth/login.php' @{ email = $V1Forced; password = $V1Pass }
+$r = Post $ctx 'auth/login.php' @{ workspace = $V1Slug; email = $V1Forced; password = $V1Pass }
 # login.php redirects to dashboard.php, and dashboard.php then bounces the flagged
 # account to change_password.php - so landing there IS the success path.
 Check "a flagged account is held at change_password" ((LandedOn $r) -eq 'auth/change_password.php') "landed=$(LandedOn $r)"
@@ -113,7 +122,7 @@ Sql "DELETE FROM clientflow_crm.login_attempts;" | Out-Null
 $lockoutSeen = $false
 for ($i = 1; $i -le 7; $i++) {
     $c = New-Session
-    $resp = Post $c 'auth/login.php' @{ email = $V1Plain; password = "wrong-guess-$i" }
+    $resp = Post $c 'auth/login.php' @{ workspace = $V1Slug; email = $V1Plain; password = "wrong-guess-$i" }
     $body = $resp.Content
     if ($body -match 'Too many failed sign-in attempts') { $lockoutSeen = $true; break }
 }
@@ -124,27 +133,27 @@ Check "failed attempts were recorded" ($counted -ge 5) "counted=$counted"
 
 # The correct password must be refused while locked out.
 $c = New-Session
-$locked = Post $c 'auth/login.php' @{ email = $V1Plain; password = $V1Pass }
+$locked = Post $c 'auth/login.php' @{ workspace = $V1Slug; email = $V1Plain; password = $V1Pass }
 Check "correct password is refused while locked out" ($locked.Content -match 'Too many failed sign-in attempts')
 
 Write-Output "`n=== 4. Successful sign-in clears the counter ==="
 Sql "DELETE FROM clientflow_crm.login_attempts;" | Out-Null
 $c = New-Session
 $c2 = New-Session
-Post $c  'auth/login.php' @{ email = 'nobody@nowhere.test'; password = 'x' } | Out-Null
-Post $c  'auth/login.php' @{ email = 'nobody@nowhere.test'; password = 'x' } | Out-Null
+Post $c  'auth/login.php' @{ workspace = $V1Slug; email = 'nobody@nowhere.test'; password = 'x' } | Out-Null
+Post $c  'auth/login.php' @{ workspace = $V1Slug; email = 'nobody@nowhere.test'; password = 'x' } | Out-Null
 $before = [int](Sql "SELECT COUNT(*) FROM clientflow_crm.login_attempts WHERE email='nobody@nowhere.test';")
 Check "failures counted before sign-in" ($before -ge 2)
 
 Write-Output "`n=== 5. Successful sign-in records a success row ==="
 $ctx3 = New-Session
-Post $ctx3 'auth/login.php' @{ email = $V1Plain; password = $V1Pass } | Out-Null
+Post $ctx3 'auth/login.php' @{ workspace = $V1Slug; email = $V1Plain; password = $V1Pass } | Out-Null
 $okRow = [int](Sql "SELECT COUNT(*) FROM clientflow_crm.login_attempts WHERE email='$V1Plain' AND succeeded=1;")
 Check "successful attempt is logged" ($okRow -ge 1) "count=$okRow"
 
 Write-Output "`n=== 6. Completing the forced change ==="
 $ctx4 = New-Session
-Post $ctx4 'auth/login.php' @{ email = $V1Forced; password = $V1Pass } | Out-Null
+Post $ctx4 'auth/login.php' @{ workspace = $V1Slug; email = $V1Forced; password = $V1Pass } | Out-Null
 $cp = Invoke-WebRequest "$BaseUrl/auth/change_password.php" -WebSession $ctx4.Session -UseBasicParsing -TimeoutSec 15
 Check "change-password page reachable" ($cp.StatusCode -eq 200)
 
@@ -171,11 +180,11 @@ Check "dashboard reachable after the change" ($dashAfter.Content -notmatch 'chan
 
 # Old password must no longer work; new one must.
 $cOld = New-Session
-$rOld = Post $cOld 'auth/login.php' @{ email = $V1Forced; password = $V1Pass }
+$rOld = Post $cOld 'auth/login.php' @{ workspace = $V1Slug; email = $V1Forced; password = $V1Pass }
 Check "old password no longer works" ($rOld.Content -match 'do not match')
 
 $cNew = New-Session
-$rNew = Post $cNew 'auth/login.php' @{ email = $V1Forced; password = $newPass }
+$rNew = Post $cNew 'auth/login.php' @{ workspace = $V1Slug; email = $V1Forced; password = $newPass }
 Check "new password works" ((LandedOn $rNew) -eq 'dashboard.php') "landed=$(LandedOn $rNew)"
 
 Write-Output "`n=== 7. Error page serves no CDN request ==="

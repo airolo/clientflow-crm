@@ -17,10 +17,14 @@ $old    = take_old();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
 
-    $email    = strtolower(post_str('email'));
-    $password = (string) ($_POST['password'] ?? '');
+    $workspace = strtolower(post_str('workspace'));
+    $email     = strtolower(post_str('email'));
+    $password  = (string) ($_POST['password'] ?? '');
 
     $errors = [];
+    if ($workspace === '' || !tenant_slug_is_valid($workspace)) {
+        $errors['workspace'] = 'Enter your workspace name.';
+    }
     if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors['email'] = 'Enter a valid email address.';
     }
@@ -29,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $loginError = attempt_login($email, $password);
+        $loginError = attempt_login($workspace, $email, $password);
         if ($loginError === null) {
             flash_success('Welcome back, ' . current_user()['name'] . '.', 'dashboard.php');
         }
@@ -37,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($errors) {
-        redirect_with_errors('auth/login.php', $errors, ['email' => $email]);
+        redirect_with_errors('auth/login.php', $errors, ['workspace' => $workspace, 'email' => $email]);
     }
 }
 ?>
@@ -68,13 +72,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?= csrf_field() ?>
 
             <div class="mb-3">
+                <label for="workspace" class="form-label">Workspace</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-buildings"></i></span>
+                    <input type="text" name="workspace" id="workspace"
+                           class="form-control<?= is_invalid($errors, 'workspace') ?>"
+                           value="<?= e(old_value($old, [], 'workspace')) ?>"
+                           placeholder="your-company" autocomplete="organization" required autofocus>
+                </div>
+                <?php if ($message = field_error($errors, 'workspace')): ?>
+                    <div class="invalid-feedback d-block"><?= e($message) ?></div>
+                <?php endif; ?>
+            </div>
+
+            <div class="mb-3">
                 <label for="email" class="form-label">Email address</label>
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-envelope"></i></span>
                     <input type="email" name="email" id="email"
                            class="form-control<?= is_invalid($errors, 'email') ?>"
                            value="<?= e(old_value($old, [], 'email')) ?>"
-                           placeholder="you@company.test" autocomplete="email" required autofocus>
+                           placeholder="you@company.test" autocomplete="email" required>
                 </div>
                 <?php if ($message = field_error($errors, 'email')): ?>
                     <div class="invalid-feedback d-block"><?= e($message) ?></div>
@@ -106,6 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php if (DEMO_MODE): ?>
         <div class="demo-cred mt-4">
             <div class="fw-semibold mb-2"><i class="bi bi-info-circle me-1"></i>Demo accounts</div>
+            <div class="mb-2">
+                <strong>Workspace:</strong> <code>clientflow-demo</code>
+            </div>
             <div class="mb-1">
                 <strong>Admin:</strong> <code><?= e(DEMO_ADMIN_EMAIL) ?></code> / <code><?= e(DEMO_ADMIN_PASS) ?></code>
             </div>
