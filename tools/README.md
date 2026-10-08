@@ -373,8 +373,9 @@ so this fails loudly instead of shipping an empty download.
 
 ## audit_test.ps1
 
-77 assertions on the audit log. Run after the others; it creates its own two
-workspaces so cross-tenant reads can actually be tested.
+94 assertions on the audit log, including the per-record history card on the
+detail pages. Run after the others; it creates its own two workspaces so
+cross-tenant reads can actually be tested.
 
 ```powershell
 # XAMPP running, project in htdocs
@@ -421,6 +422,22 @@ has no `normal`. Posting `'lead'` or `'normal'` fails validation, the record is
 never created, and every assertion downstream fails on a null id — which reads like
 an application bug and is not one. Check `is_valid_option()` before writing a
 fixture.
+
+### Counting entries on a page that has other badges
+
+The history card was added to `clients/view.php`, which already renders status,
+priority and stage badges. Two counting attempts failed against correct code:
+
+- `$page -notmatch 'Contact'` — the **create** entry legitimately lists every
+  field it was created with, so "Contact" is present exactly once. The assertion
+  became a count of `>Contact:<` equal to 1, which fails only if the *update* diff
+  wrongly repeats an unchanged field.
+- counting `text-bg-` for the badge per entry — that is the shared badge class,
+  and every status badge uses it too. Counting `<li class="list-group-item">`
+  works because the history fixture has no deals, tasks or activities.
+
+The general trap: on a page with several widgets, assert on the widget's own
+structure, not on a class name it shares with everything else.
 
 ## restore.ps1
 

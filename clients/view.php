@@ -136,6 +136,14 @@ require __DIR__ . '/../views/header.php';
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Change history -->
+        <?php
+        $auditEntityType  = 'client';
+        $auditEntityId    = $id;
+        $auditEntityLabel = $client['company_name'];
+        require __DIR__ . '/../views/audit_history.php';
+        ?>
     </div>
 
     <!-- ---------- Right column: tasks + history ---------- -->

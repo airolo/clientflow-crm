@@ -21,6 +21,7 @@ never requests them.
 | `config/database.php` | The PDO singleton |
 | `models/` | Every SQL statement in the project |
 | `models/AuditModel.php` | Writing and reading `audit_log`: `audit_record()`, `audit_diff()`, `audit_record_update()`, `audit_list()`, `audit_for_entity()` |
+| `views/audit_history.php` | The per-record "Change history" card. `require`d by a detail page after it sets `$auditEntityType` and `$auditEntityId`, never routed to directly |
 
 ## Reading order for a newcomer
 

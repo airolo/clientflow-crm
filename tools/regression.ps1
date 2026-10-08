@@ -420,8 +420,15 @@ Assert 'dashboard.php redirects when signed out' ($d.Location -match 'login\.php
 # ---------------------------------------------------------------- 2. exposure
 
 Section 'Sensitive files are not web-accessible'
+# views\audit_history.php is listed by name because it is the newest partial:
+# it reads $auditEntityType and $auditEntityId from the caller's scope, so
+# fetching it directly would render a history card for no record. The .htaccess
+# rule covers all of views/, and this asserts that is still true for the newest
+# file in it.
 foreach ($secret in @('database.sql', 'README.md', 'app/config/config.php',
-                      'app/models/DealModel.php', 'views/header.php', '.vscode/settings.json',
+                      'app/models/DealModel.php', 'app/models/AuditModel.php',
+                      'views/header.php', 'views/audit_history.php',
+                      '.vscode/settings.json',
                       '.git/HEAD', '.git/config', '.gitignore', '.gitattributes')) {
     $status = Get-Status $secret
     Assert "blocked: /$secret" ($status -eq 403 -or $status -eq 404 -or $status -eq 404) "status=$status"

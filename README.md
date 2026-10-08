@@ -597,6 +597,13 @@ below. Restoring is not a full undo of the edits made before the delete.
 sign-in, sign-out, import, signup and workspace suspension. `admin/audit_log.php`
 is the read-only view; there is no edit or delete control anywhere in the app.
 
+Client and lead detail pages carry a **Change history** card
+(`views/audit_history.php`) showing the same information for that one record, so
+"what happened to this client" does not require searching the workspace log. The
+card is `required` from the page rather than a separate route, because it reads
+the entity from the caller's scope; `.htaccess` blocks `views/` from being
+fetched directly, and `regression.ps1` asserts that.
+
 An edit records the value of **each changed field, before and after**, not just
 the fact that something changed:
 

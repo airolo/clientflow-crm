@@ -132,6 +132,19 @@ function Get-Safe($ctx, [string]$url) {
     }
 }
 
+# Status code for a path, unauthenticated. Used for the exposure checks, where
+# what matters is that the server refuses, not what it says. .NET discards the
+# response object for a 403, so the status has to be read from the exception.
+function Status-Of([string]$path) {
+    try {
+        $r = Invoke-WebRequest "$BaseUrl/$path" -UseBasicParsing -TimeoutSec 15
+        return [int]$r.StatusCode
+    } catch {
+        if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode.value__ }
+        return 0
+    }
+}
+
 # The change list for the newest entry matching a tenant and action, decoded.
 # Returns '' when there is no such row, so a missing entry reads as a string
 # comparison failure rather than an empty array that looks like a pass.
@@ -404,7 +417,79 @@ try {
           ([int](Sql "SELECT COUNT(*) FROM $DbName.audit_log WHERE tenant_id=$tenantB AND entity_type='client';") -eq 0)
 
     # -----------------------------------------------------------------------
-    Section '10. Access control'
+    Section '10. Per-record history on the detail pages'
+    # A fresh record, because section 5 purged the earlier one and its trail is
+    # no longer reachable from a page that requires the record to exist.
+    $null = Post-Form $a.Ctx 'clients/form.php' @{
+        company_name = 'History Co'; contact_person = 'Ida Marsh'; status = 'prospect'
+    }
+    $histClient = [int](Sql "SELECT id FROM $DbName.clients WHERE tenant_id=$tenantA AND company_name='History Co' LIMIT 1;")
+    Check 'the fixture client exists' ($histClient -gt 0) "id=$histClient"
+
+    $detail = Get-Safe $a.Ctx "client_view.php?id=$histClient"
+    Check 'the detail page renders a change history card' ($detail -match 'Change history')
+    Check 'and shows the create entry'                  ($detail -match 'History Co')
+
+    # Give it an edit, so the card has a before-and-after to render.
+    $null = Post-Form $a.Ctx 'clients/form.php' @{
+        id = $histClient; company_name = 'History Co'; contact_person = 'Ida Marsh'
+        status = 'active'; phone = '555-4242'
+    }
+    $detail = Get-Safe $a.Ctx "client_view.php?id=$histClient"
+    Check 'the card shows the value before the edit' ($detail -match 'prospect')
+    Check 'the card shows the value after the edit'  ($detail -match 'active')
+    Check 'the old value is struck through'          ($detail -match 'line-through')
+    Check 'the card names who made the change'       ($detail -match 'Audit Admin A')
+
+    # The create entry lists every field it was created with, so "Contact"
+    # legitimately appears once. If the update diff also listed it - which it
+    # must not, since contact_person did not change - it would appear twice.
+    # Counting is therefore the assertion; a -notmatch on 'Contact' would fail
+    # against correct behaviour.
+    $contactRows = @([regex]::Matches($detail, '>Contact:<')).Count
+    Check 'the update did not list an unchanged field' ($contactRows -eq 1) "occurrences=$contactRows"
+
+    # The same for a lead.
+    $leadDetail = Get-Safe $a.Ctx "lead_view.php?id=$leadA"
+    Check 'the lead page renders a change history card' ($leadDetail -match 'Change history')
+    Check 'and shows that lead history'                 ($leadDetail -match 'Robin Vale')
+
+    # A record nobody has edited: the card shows the create and nothing else.
+    $null = Post-Form $a.Ctx 'clients/form.php' @{
+        company_name = 'Untouched Co'; contact_person = 'Ida Marsh'; status = 'prospect'
+    }
+    $quiet = [int](Sql "SELECT id FROM $DbName.clients WHERE tenant_id=$tenantA AND company_name='Untouched Co' LIMIT 1;")
+    Check 'the second fixture client exists' ($quiet -gt 0) "id=$quiet"
+    $quietPage = Get-Safe $a.Ctx "client_view.php?id=$quiet"
+    Check 'a record with only a create still renders the card' ($quietPage -match 'Change history')
+    # Count the list items the history card renders. Not the badges: text-bg- is
+    # the shared badge class and the status badges use it too. This record has no
+    # deals, tasks or activities, so the only list items on the page are the
+    # history card's.
+    Check 'and lists exactly one entry' `
+          (([regex]::Matches($quietPage, '<li class="list-group-item')).Count -eq 1) `
+          "items=$(([regex]::Matches($quietPage, '<li class="list-group-item')).Count)"
+    Check 'with no field-change detail' ($quietPage -notmatch 'line-through')
+
+    # Another workspace must not see this record's history, even by walking ?id=
+    # with a real id from the first workspace. client_find() is tenant-scoped, so
+    # the page refuses rather than rendering an empty card - which is the
+    # behaviour worth asserting, since an empty card would look like "no history".
+    $cross = Get-Safe $b.Ctx "client_view.php?id=$histClient"
+    Check 'another workspace cannot open the record' ($cross -notmatch 'Change history')
+    Check 'and is not shown its name'                ($cross -notmatch 'History Co')
+
+    # The partial is only ever rendered from a page; fetching it directly must not
+    # work, because it reads the entity from the caller's scope and would render
+    # a history card for whatever the caller's scope happened to hold. The
+    # .htaccess rule blocks all of views/, and this proves it covers the newest
+    # file added there.
+    $partialStatus = Status-Of 'views/audit_history.php'
+    Check 'the history partial is not web-accessible' `
+          ($partialStatus -in 403, 404) "status=$partialStatus"
+
+    # -----------------------------------------------------------------------
+    Section '11. Access control'
     $staff = Sign-In $slugA $staffMail $Password
     if (-not $staff.Ok) {
         Check 'the staff account can sign in' $false
@@ -426,7 +511,7 @@ try {
     }
 
     # -----------------------------------------------------------------------
-    Section '11. Filtering and paging'
+    Section '12. Filtering and paging'
     # Assertions below look for record names rather than badge text. The action
     # dropdown on the page lists every action, so matching on 'Purge' or 'Create'
     # would pass whether or not the filter worked.
@@ -461,7 +546,7 @@ try {
     Check 'a malformed type filter does not break the page' ($bogusType -match 'Audit log')
 
     # -----------------------------------------------------------------------
-    Section '12. A deleted user keeps their history'
+    Section '13. A deleted user keeps their history'
     $staffId = [int](Sql "SELECT id FROM $DbName.users WHERE email='$staffMail';")
     # Give the staff account some history of its own before removing it.
     $null = Post-Form $staff.Ctx 'clients/form.php' @{ company_name = 'Staff Made Co'; status = 'prospect' }
@@ -479,7 +564,7 @@ try {
     Check 'and the rows still name them' ((Sql "SELECT user_name FROM $DbName.audit_log WHERE tenant_id=$tenantA AND user_name='Audit Staff' ORDER BY id DESC LIMIT 1;") -eq 'Audit Staff')
 
     # -----------------------------------------------------------------------
-    Section '13. The log is append-only and never trimmed'
+    Section '14. The log is append-only and never trimmed'
     $appPhp = @(Get-ChildItem -Path (Join-Path $RepoRoot 'app') -Recurse -Filter *.php |
                 ForEach-Object { $_.FullName })
     $deleteHits = @($appPhp | Where-Object {
@@ -527,7 +612,7 @@ $appPhp = @(Get-ChildItem -Path (Join-Path $RepoRoot 'app') -Recurse -Filter *.p
     Check 'no operational script prunes the log' ($opHits.Count -eq 0) ($opHits -join ', ')
 
     # -----------------------------------------------------------------------
-    Section '14. No page errors'
+    Section '15. No page errors'
     Check 'no page raised an error' ($script:pageErrors.Count -eq 0) ($script:pageErrors | Out-String)
 }
 finally {
@@ -540,7 +625,7 @@ finally {
                            WHERE t.slug='clientflow-demo';")
     Check 'test workspaces removed'  ([int](Sql "SELECT COUNT(*) FROM $DbName.tenants WHERE slug LIKE 'aud-%';") -eq 0)
     Check 'no test users left'       ([int](Sql "SELECT COUNT(*) FROM $DbName.users WHERE email LIKE '%@audit.test';") -eq 0)
-    Check 'no test clients left'     ([int](Sql "SELECT COUNT(*) FROM $DbName.clients WHERE company_name IN ('Audit Co','Imported Co','Second Co','Staff Made Co');") -eq 0)
+    Check 'no test clients left'     ([int](Sql "SELECT COUNT(*) FROM $DbName.clients WHERE company_name IN ('Audit Co','Imported Co','Second Co','Staff Made Co','History Co','Untouched Co');") -eq 0)
     Check 'no test leads left'       ([int](Sql "SELECT COUNT(*) FROM $DbName.leads WHERE lead_name='Robin Vale';") -eq 0)
     Check 'no test tasks left'       ([int](Sql "SELECT COUNT(*) FROM $DbName.tasks WHERE title='Call Robin';") -eq 0)
     Check 'no orphaned audit rows'   ([int](Sql "SELECT COUNT(*) FROM $DbName.audit_log a LEFT JOIN $DbName.tenants t ON t.id=a.tenant_id WHERE t.id IS NULL;") -eq 0)

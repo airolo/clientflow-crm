@@ -132,6 +132,14 @@ require __DIR__ . '/../views/header.php';
                 </ul>
             <?php endif; ?>
         </div>
+
+        <!-- Change history -->
+        <?php
+        $auditEntityType  = 'lead';
+        $auditEntityId    = $id;
+        $auditEntityLabel = $lead['lead_name'];
+        require __DIR__ . '/../views/audit_history.php';
+        ?>
     </div>
 
     <div class="col-12 col-lg-8">
