@@ -135,6 +135,53 @@ Known gap: this covers data access, not the admin-management guard. Making
 `user_admin_count()` global again does not fail here, because no section demotes
 an admin across workspaces. `check_tenancy.ps1` is what covers that one.
 
+## settings_test.ps1
+
+43 assertions over two workspaces configured with different currencies and timezones.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\settings_test.ps1
+```
+
+`isolation_test.ps1` covers record access. This one covers the leak that is
+easy to make and hard to see: a *presentation* setting crossing a workspace
+boundary. Currency and timezone are the first settings that are genuinely
+per-tenant rather than per-user, and both are easy to get wrong by reading a
+global constant instead of the session.
+
+It also covers the parts that are easy to leave broken: that `money()` is really
+wired to the setting rather than still hardcoded, that a timezone change takes
+effect immediately rather than on the next sign-in, that validation rejects
+codes and zones that are not on the allowed lists, that staff cannot reach the
+page, and that the workspace slug is not editable.
+
+Self-cleaning. It changes the demo workspace's currency and timezone, so those
+are snapshotted and restored.
+
+### Asserting the offset, not the clock
+
+The settings page prints the current time for the workspace with its UTC offset,
+and that offset is the assertion. Two zones can show the same `HH:MM` at some
+times of day, so a clock-based assertion would be flaky rather than sharp.
+
+The display exists for the same reason the assertion does. Without it the
+timezone setting was stored and applied but invisible, and the suite could not
+tell "saved and applied" from "saved and ignored" — deleting the
+`date_default_timezone_set()` call left it at 38/38. A setting nobody can see
+working is its own kind of bug.
+
+Verified by removing that call again: 3 assertions fail, including the one for a
+timezone saved earlier in the same run, so both the sign-in path and the
+save-then-reload path are covered.
+
+### Currency symbols in a .ps1 file
+
+The symbols are built from code points (`[char]0x00A3`) rather than typed
+literally. PowerShell 5.1 reads a `.ps1` without a BOM as ANSI, so a literal
+pound or euro sign in the source is a parse error — the script will not compile
+at all. No file in this folder carries non-ASCII bytes.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in

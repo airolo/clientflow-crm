@@ -241,6 +241,7 @@ ClientFlow/
 │   ├── user_action.php
 │   ├── recycle_bin.php           #   deleted records: restore or delete forever
 │   ├── recycle_action.php
+│   ├── settings.php              #   this workspace's name, currency, timezone
 │   └── README.md
 │
 ├── app/                          # never served over HTTP
@@ -284,6 +285,7 @@ ClientFlow/
 │   ├── regression.ps1            # 331-assertion end-to-end suite
 │   ├── verify_phase1.ps1         # 26 checks for the sign-in hardening
 │   ├── isolation_test.ps1        # 123 checks across two live workspaces
+│   ├── settings_test.ps1         # 43 checks for per-workspace settings
 │   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -805,6 +807,31 @@ Two guards exist because one is not enough:
 Sign-in throttling is keyed on `(tenant_id, email)`, so one workspace's failed guesses cannot lock
 out another workspace's account with the same address. The per-IP limit stays global on purpose, to
 stop a distributed run of guesses.
+
+### Per-workspace settings
+
+`admin/settings.php` holds the three values that change how a workspace presents itself: its business
+name, its currency, and its timezone. It takes **no workspace id** — that comes from the session — so
+a settings page that could edit any workspace would undo the tenancy work rather than build on it.
+
+`money()` and `money_short()` read the workspace's currency, so every figure in the app follows it
+without any call site changing. Amounts are stored as plain numbers and only formatted for display, so
+switching currency converts nothing and rewrites nothing.
+
+The workspace timezone is applied in `require_active_tenant()`, which every authenticated page passes
+through before any model runs. It is guarded: a stored zone that PHP no longer recognises — a tzdata
+rename, or a hand-edited row — falls back to `APP_TIMEZONE` rather than taking the site down.
+
+Two deliberate choices worth knowing:
+
+- **Currency symbols are stored per code, not derived from the currency name.** SEK, NOK and DKK are
+  all `kr`, so a name-derived symbol would label Swedish krona as Norwegian.
+- **The timezone dropdown is a curated shortlist, but validation is not.** The form offers ~50 common
+  zones while the validator accepts any identifier PHP recognises, so a workspace somewhere nobody
+  thought of is not blocked from setting its own.
+
+The workspace slug is not editable. People sign in with it, so changing it would lock them out until
+you told them the new one.
 
 ### Adding a model function
 
