@@ -28,21 +28,32 @@ Needs PowerShell 5.1 (bundled with Windows) and `mysql.exe` at
 `C:\xampp\mysql\bin\mysql.exe`. Override with `-BaseUrl` if your project folder
 is named differently.
 
-### It needs the demo passwords
+### It signs in with accounts it creates
 
-The suite signs in as `admin@clientflow.test` / `admin123` and
-`sarah@clientflow.test` / `staff123`. The app forces a password change on every
-seeded account, so once you follow its own instructions those passwords stop
-matching and the suite aborts with `ABORT: admin login failed`.
+Neither script uses the demo passwords. Each creates its own throwaway
+accounts — `regression-admin@`, `regression-staff@`, `forced@` and the two
+`verify-@` accounts — and deletes them at the end.
 
-It will not reset the password itself: silently overwriting the admin password
-of whatever database it is pointed at would be worse than failing. Re-import
-`database.sql` to get the seeded state back, or set the hash by hand. The proper
-fix — provisioning throwaway accounts — is not done yet.
+That is deliberate: the app forces every seeded account to change its password,
+so sharing the demo credentials meant that following the app's own instructions
+broke the suite with `ABORT: admin login failed`.
+
+Neither script resets a password it did not set. Silently replacing the admin
+password of whatever database they are pointed at would be worse than failing the
+run.
+
+Two guards keep repeat runs safe:
+
+- A pre-run sweep clears leftovers from an aborted run before the baseline is
+  captured, so a stale row cannot make the suite fail the second time.
+- The seeded accounts are snapshotted and restored during cleanup, and the
+  restore is asserted. The last-admin test attempts a demotion, and without the
+  restore a run where that wrongly succeeded left the demo admin as a staff
+  user for every later run.
 
 ## verify_phase1.ps1
 
-24 checks covering the sign-in hardening on its own: `DEMO_MODE` gating, the
+26 checks covering the sign-in hardening on its own: `DEMO_MODE` gating, the
 forced password change, throttling and lockout, and the two static checks behind
 the CSP. Useful when changing anything in `app/auth.php` or
 `app/models/LoginAttemptModel.php`.

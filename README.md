@@ -273,8 +273,8 @@ ClientFlow/
 │       └── README.txt             # versions, licences, local modification
 │
 ├── tools/
-│   ├── regression.ps1            # 321-assertion end-to-end suite
-│   ├── verify_phase1.ps1         # 24 checks for the sign-in hardening
+│   ├── regression.ps1            # 331-assertion end-to-end suite
+│   ├── verify_phase1.ps1         # 26 checks for the sign-in hardening
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
 │
@@ -678,29 +678,32 @@ works as a pre-commit check. It needs PowerShell 5.1 (bundled with Windows) and 
 path as `C:\xampp\mysql\bin\mysql.exe`; override with `-BaseUrl` if your folder is named
 differently.
 
-### The suite signs in with the demo accounts
+### The suite signs in with accounts it creates
 
-**It needs `admin@clientflow.test` / `admin123` and `sarah@clientflow.test` / `staff123` to still
-be set.** The app forces a password change on every seeded account, so following its own
-instructions means those passwords stop matching and the suite aborts at sign-in with
-`ABORT: admin login failed`.
+Both scripts create their own throwaway accounts — `regression-admin@`, `regression-staff@`,
+`forced@` and the two `verify-@` accounts — and delete them afterwards. **None of them depend on
+the demo passwords**, which matters because the app forces every seeded account to change its
+password: using the demo accounts meant that following the app's own instructions broke the tests
+with `ABORT: admin login failed`, and the suite had to reach into the seeded accounts (clearing
+`must_change_password`, then restoring it) just to get in.
 
-That is a real rough edge rather than a test bug: the suite shares the demo credentials rather
-than provisioning its own accounts, and it deliberately will not reset a password itself — doing
-so would quietly overwrite the admin password of whatever database it is pointed at. Put it back
-with:
+Nothing is ever overwritten that the script did not create. It deliberately does not reset a
+password: quietly replacing the admin password of whatever database it is pointed at would be worse
+than failing the run. `verify_phase1.ps1` does have to set a new password to test the forced-change
+flow, which is exactly why it does that on its own account.
 
-```sql
-UPDATE users SET password_hash = '<bcrypt of admin123>' WHERE email = 'admin@clientflow.test';
-```
+Two further guards, both added after they were found to be missing:
 
-or re-import `database.sql`, which restores the seeded state and forgets everything else. The
-proper fix is for the suite to create its own throwaway accounts; that is not done yet.
+- **A pre-run sweep.** Anything a previous aborted run left behind is cleared *before* the baseline
+  is captured, otherwise a leftover row counts as part of the baseline and the suite cannot be run
+  twice in a row.
+- **The seeded accounts are snapshotted and restored.** The last-admin test attempts a demotion;
+  before the restore existed, a run where that attempt wrongly succeeded left the demo admin as a
+  staff user for every subsequent run. Cleanup now puts the seeded accounts back from the snapshot
+  and asserts it worked, so a failed test cannot corrupt the demo data.
 
-`tools/verify_phase1.ps1` covers the sign-in hardening workstream on its own (24 checks) and is
-handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`. It has the
-same dependency: it signs in as `priya@clientflow.test` and restores that password itself
-afterwards, so interrupt it mid-run and re-import to be safe.
+`tools/verify_phase1.ps1` covers the sign-in hardening workstream on its own (26 checks) and is
+handy when changing anything in `app/auth.php` or `app/models/LoginAttemptModel.php`.
 
 ---
 

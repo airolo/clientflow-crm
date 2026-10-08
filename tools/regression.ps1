@@ -142,18 +142,91 @@ if ($probe.Code -ne 200) {
     exit 1
 }
 
-# Seeded accounts are flagged must_change_password = 1, so signing in would
-# land on auth/change_password.php instead of the app. Clear the flag for the
-# two accounts this suite drives, and assert the flag is restored at the end.
-# The forced-change behaviour itself is covered by its own section below.
-$flaggedBefore = Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',must_change_password) ORDER BY id)
-                             FROM users WHERE id IN (1,2);"
-Invoke-Sql "UPDATE users SET must_change_password = 0 WHERE id IN (1,2);" | Out-Null
+# ---------------------------------------------------------------------------
+# Throwaway accounts
+#
+# The suite signs in as accounts it creates itself rather than the seeded demo
+# ones. That matters because the app forces every seeded account to change its
+# password: using them meant that following the app's own instructions broke the
+# tests with "ABORT: admin login failed", and the suite had to reach into the
+# seeded accounts (clearing must_change_password, then restoring it) to get in.
+#
+# The suite also deliberately never resets a password. Overwriting the admin
+# password of whatever database it is pointed at would be far worse than failing.
+# Everything it touches, it created first.
+# ---------------------------------------------------------------------------
+$TestPass = 'Regression!Test1'
+# bcrypt of $TestPass, generated with PHP password_hash(PASSWORD_DEFAULT).
+$TestHash = '$2y$10$aTWww8OncS5sYUl7TAqNe.hdpKGyghs8CdZ1y242gPsvwz/iyBXju'
+$AdminEmail = 'regression-admin@clientflow.test'
+$StaffEmail = 'regression-staff@clientflow.test'
+
+# Sweep anything a previous aborted run left behind, BEFORE the baseline is
+# captured. Otherwise a leftover row is counted as part of the baseline, and
+# the cleanup at the end removes it - which fails the "counts restored" check
+# and makes the suite unable to run twice in a row.
+Invoke-Sql "DELETE FROM clients WHERE company_name LIKE 'Regression%'
+                        OR company_name LIKE 'Redirect%'
+                        OR company_name LIKE 'Xss%'
+                        OR company_name LIKE 'Flash%'
+                        OR company_name LIKE 'Probe%';
+            DELETE FROM leads      WHERE lead_name   LIKE 'Regression%' OR lead_name LIKE 'Flash%';
+            DELETE FROM tasks      WHERE title       LIKE 'Regression%' OR title LIKE 'Flash%';
+            DELETE FROM deals      WHERE deal_title  LIKE 'Regression%' OR deal_title LIKE 'Flash%';
+            DELETE FROM activities WHERE title       LIKE 'Regression%' OR title LIKE 'Flash%';
+            DELETE FROM users      WHERE email LIKE '%regression%' OR email LIKE '%@regression.test';
+            DELETE FROM login_attempts;" | Out-Null
+
+# Baseline is captured BEFORE the throwaway accounts are created, so cleanup can
+# assert the database is back to exactly the state it found.
+$baseline = Invoke-Sql "SELECT CONCAT(
+    (SELECT COUNT(*) FROM users),    '/',
+    (SELECT COUNT(*) FROM clients),  '/',
+    (SELECT COUNT(*) FROM leads),    '/',
+    (SELECT COUNT(*) FROM deals),    '/',
+    (SELECT COUNT(*) FROM tasks),    '/',
+    (SELECT COUNT(*) FROM activities))"
+
+# Snapshot the seeded accounts so cleanup can both restore and prove they were
+# untouched. The last-admin test below attempts a demotion; if that attempt ever
+# wrongly succeeds it must not be able to leave the demo admin as a staff user.
+$seededUsersBefore = Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',role,':',is_active,':',must_change_password) ORDER BY id SEPARATOR '|')
+                                  FROM users WHERE id IN (1,2,3,4);"
+
+Invoke-Sql "DELETE FROM users WHERE email IN ('$AdminEmail', '$StaffEmail');
+            INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
+            VALUES ('Regression Admin', '$AdminEmail', '$TestHash', 'admin', NULL, 1, 0),
+                   ('Regression Staff', '$StaffEmail', '$TestHash', 'staff', NULL, 1, 0);" | Out-Null
+
+$AdminId = [int](Invoke-Sql "SELECT id FROM users WHERE email = '$AdminEmail';")
+$StaffId = [int](Invoke-Sql "SELECT id FROM users WHERE email = '$StaffEmail';")
+if ($AdminId -le 0 -or $StaffId -le 0) {
+    Write-Output 'ABORT: could not create the throwaway test accounts'
+    exit 1
+}
+
+# One client and one lead assigned to the suite's staff user. Created here
+# rather than in the read-access section because the staff page-render sweep
+# earlier on has to open a detail page the staff user actually owns - can_view()
+# now blocks seeded detail pages, so it cannot borrow client 1 any more.
+Invoke-Sql "DELETE FROM clients WHERE company_name = 'Regression OwnedByStaff';
+            DELETE FROM leads   WHERE lead_name    = 'Regression LeadForStaff';
+            INSERT INTO clients (company_name, contact_person, status, assigned_to, created_by)
+            VALUES ('Regression OwnedByStaff', 'Staff Contact', 'prospect', $StaffId, $AdminId);
+            INSERT INTO leads (lead_name, lead_source, status, estimated_value, assigned_to, created_by)
+            VALUES ('Regression LeadForStaff', 'website', 'new', 10, $StaffId, $AdminId);" | Out-Null
+
+$StaffFixtureClient = [int](Invoke-Sql "SELECT id FROM clients WHERE company_name='Regression OwnedByStaff' LIMIT 1;")
+$StaffFixtureLead   = [int](Invoke-Sql "SELECT id FROM leads WHERE lead_name='Regression LeadForStaff' LIMIT 1;")
+if ($StaffFixtureClient -le 0 -or $StaffFixtureLead -le 0) {
+    Write-Output 'ABORT: could not create the staff fixtures'
+    exit 1
+}
 
 $admin = New-Object System.Net.CookieContainer
 $adminLogin = Invoke-App 'POST' 'auth/login.php' $admin @{
     _token = (Get-Token 'auth/login.php' $admin)
-    email = 'admin@clientflow.test'; password = 'admin123'
+    email = $AdminEmail; password = $TestPass
 }
 if ($adminLogin.Location -notmatch 'dashboard\.php$') {
     Write-Output "ABORT: admin login failed (got '$($adminLogin.Location)')"
@@ -163,16 +236,8 @@ if ($adminLogin.Location -notmatch 'dashboard\.php$') {
 $staff = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $staff @{
     _token = (Get-Token 'auth/login.php' $staff)
-    email = 'sarah@clientflow.test'; password = 'staff123'
+    email = $StaffEmail; password = $TestPass
 } | Out-Null
-
-$baseline = Invoke-Sql "SELECT CONCAT(
-    (SELECT COUNT(*) FROM users),    '/',
-    (SELECT COUNT(*) FROM clients),  '/',
-    (SELECT COUNT(*) FROM leads),    '/',
-    (SELECT COUNT(*) FROM deals),    '/',
-    (SELECT COUNT(*) FROM tasks),    '/',
-    (SELECT COUNT(*) FROM activities))"
 
 # ---------------------------------------------------------------- 1. assets
 
@@ -370,7 +435,7 @@ foreach ($page in @('dashboard.php', 'clients/index.php', 'leads/index.php', 'pi
 }
 $bad = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $bad @{
-    _token = (Get-Token 'auth/login.php' $bad); email = 'admin@clientflow.test'; password = 'nope'
+    _token = (Get-Token 'auth/login.php' $bad); email = $AdminEmail; password = 'nope'
 } | Out-Null
 Assert 'wrong password generic error' ((Invoke-App 'GET' 'auth/login.php' $bad).Body -match 'do not match our records')
 $unknown = New-Object System.Net.CookieContainer
@@ -382,17 +447,16 @@ Assert 'unknown email same error (no enumeration)' ((Invoke-App 'GET' 'auth/logi
 # ---------------------------------------------------------------- 3b. forced password change
 
 Section 'Forced password change'
-# Uses a throwaway account so the seeded passwords are never mutated.
+# Its own throwaway account, flagged so it is held at the change-password screen.
+# The hash is the suite's test hash, so nothing here depends on a seeded password.
 Invoke-Sql "DELETE FROM users WHERE email = 'forced@regression.test';
             INSERT INTO users (name, email, password_hash, role, phone, is_active, must_change_password)
-            VALUES ('Forced Regression', 'forced@regression.test',
-                    '`$2y`$10`$RPo0/LTTWko6dSHJEJslvOeQ21suPGapSouCjlOfm4AEGaA/M1vDW',
-                    'staff', NULL, 1, 1);" | Out-Null
+            VALUES ('Forced Regression', 'forced@regression.test', '$TestHash', 'staff', NULL, 1, 1);" | Out-Null
 
 $forced = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $forced @{
     _token = (Get-Token 'auth/login.php' $forced)
-    email = 'forced@regression.test'; password = 'staff123'
+    email = 'forced@regression.test'; password = $TestPass
 } | Out-Null
 
 Assert 'flagged account lands on change_password' (
@@ -415,7 +479,7 @@ Assert 'flag still set after a failed change' (
 $newPw = 'Regression' + (Get-Random -Minimum 10000 -Maximum 99999) + '!'
 $done = Invoke-App 'POST' 'auth/change_password.php' $forced @{
     _token = (Get-Token 'auth/change_password.php' $forced)
-    current_password = 'staff123'; new_password = $newPw; confirm_password = $newPw
+    current_password = $TestPass; new_password = $newPw; confirm_password = $newPw
 }
 Assert 'successful change redirects away from change_password' ($done.Location -match 'dashboard\.php$')
 Assert 'flag cleared in the database' (
@@ -425,7 +489,7 @@ Assert 'dashboard now reachable' ((Invoke-App 'GET' 'dashboard.php' $forced).Cod
 $oldPw = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $oldPw @{
     _token = (Get-Token 'auth/login.php' $oldPw)
-    email = 'forced@regression.test'; password = 'staff123'
+    email = 'forced@regression.test'; password = $TestPass
 } | Out-Null
 Assert 'the old password no longer signs in' (
     (Invoke-App 'GET' 'auth/login.php' $oldPw).Body -match 'do not match our records')
@@ -462,10 +526,10 @@ Invoke-Sql "DELETE FROM login_attempts;" | Out-Null
 $good = New-Object System.Net.CookieContainer
 Invoke-App 'POST' 'auth/login.php' $good @{
     _token = (Get-Token 'auth/login.php' $good)
-    email = 'admin@clientflow.test'; password = 'admin123'
+    email = $AdminEmail; password = $TestPass
 } | Out-Null
 Assert 'successful sign-in is logged' (
-    [int](Invoke-Sql "SELECT COUNT(*) FROM login_attempts WHERE email='admin@clientflow.test' AND succeeded=1;") -ge 1)
+    [int](Invoke-Sql "SELECT COUNT(*) FROM login_attempts WHERE email='$AdminEmail' AND succeeded=1;") -ge 1)
 
 # ---------------------------------------------------------------- 4. pages
 
@@ -508,10 +572,18 @@ foreach ($page in $adminPages) {
     Assert "admin $page" ($ok -and $errors.Count -eq 0) "code=$($r.Code) len=$($r.Body.Length) errs=$($errors.Count) $($errors -join ' | ')"
 }
 foreach ($page in @('dashboard.php','clients/index.php','leads/index.php','pipeline/index.php','tasks/index.php',
-                    'activities/index.php','reports/index.php','auth/profile.php','client_view.php?id=1','lead_view.php?id=1')) {
+                    'activities/index.php','reports/index.php','auth/profile.php',
+                    "client_view.php?id=$StaffFixtureClient", "lead_view.php?id=$StaffFixtureLead")) {
     Clear-Log
     $r = Invoke-App 'GET' $page $staff
     Assert "staff $page" ($r.Code -eq 200 -and $r.Body.Length -gt 3000 -and (Get-LogErrors).Count -eq 0) "code=$($r.Code)"
+}
+# A record the staff user does not own must redirect, not render. Checked here
+# too so the staff list cannot quietly stop covering the detail pages.
+foreach ($page in @('client_view.php?id=1', 'lead_view.php?id=1')) {
+    Clear-Log
+    $r = Invoke-App 'GET' $page $staff
+    Assert "staff redirected from $page" ($r.Code -eq 302) "code=$($r.Code)"
 }
 
 # ---------------------------------------------------------------- 5. CRUD
@@ -682,39 +754,67 @@ Assert 'stored XSS escaped (script)' (-not ($xbody.Contains('<script>alert(1)</s
 Assert 'stored XSS escaped (attribute)' (-not ($xbody -match '<img[^>]*onerror'))
 Invoke-Sql "DELETE FROM clients WHERE id=$xid;" | Out-Null
 
+# Last-admin protection.
+#
+# The suite now runs as its own admin, so there are two admins and demoting the
+# seeded one would legitimately succeed. Demote the suite's OWN admin first -
+# which touches only a row it created - and then attempt to demote the seeded
+# admin, who is by then genuinely the last one. The session still carries
+# role=admin, so the request that follows is still made by an administrator.
+Invoke-Sql "UPDATE users SET role = 'staff' WHERE id = $AdminId;" | Out-Null
+
 $t = Get-Token 'admin/user_form.php' $admin
 Invoke-App 'POST' 'admin/user_form.php' $admin @{
     _token = $t; id = 1; name = 'Alex Morgan'; email = 'admin@clientflow.test'
     role = 'staff'; password = ''; is_active = '1'
 } | Out-Null
-Assert 'cannot demote the only admin' ((Invoke-Sql 'SELECT role FROM users WHERE id=1;') -eq 'admin')
+Assert 'cannot demote the last admin' ((Invoke-Sql 'SELECT role FROM users WHERE id=1;') -eq 'admin')
 Assert 'last-admin error surfaced' ((Invoke-App 'GET' 'user_form.php?id=1' $admin).Body -match 'only active admin')
+
+# Put the suite's admin back, so later sections still have one.
+Invoke-Sql "UPDATE users SET role = 'admin' WHERE id = $AdminId;" | Out-Null
 $t = Get-Token 'admin/users.php' $admin
-Invoke-App 'POST' 'admin/user_action.php' $admin @{ _token = $t; action = 'delete'; id = 1 } | Out-Null
-Assert 'admin cannot delete own account' ((Invoke-Sql 'SELECT COUNT(*) FROM users WHERE id=1;') -eq '1')
+Invoke-App 'POST' 'admin/user_action.php' $admin @{
+    _token = $t; action = 'create'; name = 'Regression Temp Admin'
+    email = 'regression-temp-admin@clientflow.test'; password = $TestPass; role = 'admin'
+} | Out-Null
+$tempAdminId = [int](Invoke-Sql "SELECT id FROM users WHERE email = 'regression-temp-admin@clientflow.test';")
+Assert 'admin can create another admin' ($tempAdminId -gt 0)
+
+# Two admins now, so deleting the seeded one would be allowed - which is exactly
+# why the self-delete guard is what needs testing, and it must target the account
+# that is actually signed in.
+$t = Get-Token 'admin/users.php' $admin
+Invoke-App 'POST' 'admin/user_action.php' $admin @{ _token = $t; action = 'delete'; id = $AdminId } | Out-Null
+Assert 'admin cannot delete own account' ((Invoke-Sql "SELECT COUNT(*) FROM users WHERE id=$AdminId;") -eq '1')
+Assert 'self-delete error surfaced' ((Invoke-App 'GET' 'admin/users.php' $admin).Body -match 'cannot delete your own account')
+
+# And the seeded admin is still there, untouched.
+Assert 'seeded admin survived the run' ((Invoke-Sql 'SELECT COUNT(*) FROM users WHERE id=1;') -eq '1')
+Invoke-Sql "DELETE FROM users WHERE id = $tempAdminId;" | Out-Null
 
 # ------------------------------------------------------------ read security
 
 Section 'Read-level access'
 
-# Seeded ownership: Sarah is user 2. Client 1 and lead 1 are hers;
-# client 2 and lead 2 belong to Marcus (user 3).
-Assert 'staff can view a client assigned to them' ((Invoke-App 'GET' 'client_view.php?id=1' $staff).Code -eq 200)
-Assert 'staff can view a lead assigned to them' ((Invoke-App 'GET' 'lead_view.php?id=1' $staff).Code -eq 200)
+# The suite's staff account owns the two fixtures created in setup, which is
+# what makes the positive cases here meaningful: can_view() allows a record you
+# created or are assigned to, and this account owns nothing in the seed data.
+Assert 'staff can view a client assigned to them' ((Invoke-App 'GET' "client_view.php?id=$StaffFixtureClient" $staff).Code -eq 200)
+Assert 'staff can view a lead assigned to them' ((Invoke-App 'GET' "lead_view.php?id=$StaffFixtureLead" $staff).Code -eq 200)
 
 # can_manage() only ever gated writes, so these used to render in full.
-$r = Invoke-App 'GET' 'client_view.php?id=2' $staff
+$r = Invoke-App 'GET' 'client_view.php?id=1' $staff
 Assert 'staff blocked from another user\'s client detail' ($r.Location -match 'clients/index\.php$') "location=$($r.Location)"
-Assert 'blocked client detail leaks no contact details' (-not ($r.Body -match 'Bluepeak|hannah@'))
-Assert 'blocked client detail leaks no notes' (-not ($r.Body -match 'Analytics add-on'))
+Assert 'blocked client detail leaks no contact details' (-not ($r.Body -match 'Northwind|daniel@'))
 
-$r = Invoke-App 'GET' 'lead_view.php?id=2' $staff
+$r = Invoke-App 'GET' 'lead_view.php?id=1' $staff
 Assert 'staff blocked from another user\'s lead detail' ($r.Location -match 'leads/index\.php$') "location=$($r.Location)"
-Assert 'blocked lead detail leaks no contact details' (-not ($r.Body -match 'Aisha Rahman|aisha@'))
+Assert 'blocked lead detail leaks no contact details' (-not ($r.Body -match 'Whitfield|whitfield@'))
 
 # Admins are unaffected.
-Assert 'admin can view any client' ((Invoke-App 'GET' 'client_view.php?id=2' $admin).Code -eq 200)
-Assert 'admin can view any lead' ((Invoke-App 'GET' 'lead_view.php?id=2' $admin).Code -eq 200)
+Assert 'admin can view any client' ((Invoke-App 'GET' 'client_view.php?id=1' $admin).Code -eq 200)
+Assert 'admin can view any lead' ((Invoke-App 'GET' 'lead_view.php?id=1' $admin).Code -eq 200)
 
 # A record the staff user created is theirs even if assigned elsewhere.
 $t = Get-Token 'clients/form.php' $staff
@@ -725,15 +825,20 @@ $mine = [int](Invoke-Sql "SELECT id FROM clients WHERE company_name='Regression 
 Assert 'a staff user can view a record they created' ($mine -gt 0 -and (Invoke-App 'GET' "client_view.php?id=$mine" $staff).Code -eq 200)
 
 # Lists and reports stay org-wide on purpose - scoping them would break team
-# performance reporting.
+# performance reporting. Asserted against the seed data, which nobody owns.
 Assert 'client list stays org-wide for staff' ((Invoke-App 'GET' 'clients.php?search=Bluepeak' $staff).Body -match 'Bluepeak')
 Assert 'reports stay org-wide for staff' ((Invoke-App 'GET' 'reports/index.php' $staff).Body -match 'Team performance')
 
-# The UI must not offer an action the server will refuse.
-$listHtml = (Invoke-App 'GET' 'clients.php?search=Bluepeak' $staff).Body
-Assert 'staff are not offered Edit on a record they cannot manage' ($listHtml -notmatch 'clients/form\.php\?id=2')
-Assert 'staff are not offered Delete on a record they cannot manage' (
-    (-not ($listHtml -match 'action=.delete.')) -or (-not ($listHtml -match 'id=2')))
+# The UI must not offer an action the server will refuse. The seed client is
+# owned by someone else, so no Edit or Delete button should appear for it - while
+# the staff user's own client must still show both.
+$notMine = (Invoke-App 'GET' 'clients.php?search=Bluepeak' $staff).Body
+Assert 'staff are not offered Edit on a record they cannot manage' ($notMine -notmatch 'clients/form\.php\?id=2')
+Assert 'staff are not offered Delete on a record they cannot manage' ($notMine -notmatch 'name="action"\s+value="delete"')
+
+$isMine = (Invoke-App 'GET' "clients.php?search=OwnedByStaff" $staff).Body
+Assert 'staff ARE offered Edit on their own record' ($isMine -match ('clients/form\.php\?id=' + $StaffFixtureClient))
+Assert 'staff ARE offered Delete on their own record' ($isMine -match 'name="action"\s+value="delete"')
 
 Invoke-Sql "DELETE FROM clients WHERE company_name='Regression StaffOwned';" | Out-Null
 
@@ -782,7 +887,7 @@ Invoke-App 'POST' 'clients/action.php' $admin @{
 
 Assert 'client row survives the delete' ((Invoke-Sql "SELECT COUNT(*) FROM clients WHERE id=$cId;") -eq '1')
 Assert 'client is stamped, not removed' ((Invoke-Sql "SELECT deleted_at IS NOT NULL FROM clients WHERE id=$cId;") -eq '1')
-Assert 'deleter is recorded' ((Invoke-Sql "SELECT deleted_by FROM clients WHERE id=$cId;") -eq '1')
+Assert 'deleter is recorded' ((Invoke-Sql "SELECT deleted_by FROM clients WHERE id=$cId;") -eq $AdminId)
 
 # The whole point: the children are untouched.
 $afterDelete = Invoke-Sql "SELECT CONCAT(
@@ -807,7 +912,7 @@ Assert 'reports ignore it' (-not ((Invoke-App 'GET' 'reports/index.php' $admin).
 # --- recycle bin ---
 $bin = (Invoke-App 'GET' 'admin/recycle_bin.php?type=client&search=SoftDelete' $admin).Body
 Assert 'recycle bin lists the deleted client' ($bin -match 'Regression SoftDelete')
-Assert 'recycle bin shows who deleted it' ($bin -match 'Alex Morgan')
+Assert 'recycle bin shows who deleted it' ($bin -match 'Regression Admin')
 Assert 'recycle bin counts the linked records' ($bin -match '3 attached records')
 
 Assert 'staff cannot open the recycle bin' ((Invoke-App 'GET' 'admin/recycle_bin.php' $staff).Location -match 'dashboard\.php$')
@@ -883,10 +988,23 @@ Invoke-App 'POST' 'auth/profile.php' $admin @{
 } | Out-Null
 Assert 'wrong current password rejected' ((Invoke-App 'GET' 'auth/profile.php' $admin).Body -match 'current password is not correct')
 $t = Get-Token 'auth/profile.php' $admin
+# Editing the profile to an email another account already uses must be refused.
+# The suite signs in as its own account, so the assertion is about that account's
+# row rather than a seeded one - and posting its own email back must work, which
+# also covers the happy path.
+$t = Get-Token 'auth/profile.php' $admin
 Invoke-App 'POST' 'auth/profile.php' $admin @{
-    _token = $t; action = 'details'; name = 'Alex Morgan'; email = 'sarah@clientflow.test'
+    _token = $t; action = 'details'; name = 'Regression Admin'; email = $AdminEmail
 } | Out-Null
-Assert 'profile duplicate email rejected' ((Invoke-Sql 'SELECT email FROM users WHERE id=1;') -eq 'admin@clientflow.test')
+Assert 'profile can save its own details' (
+    (Invoke-Sql "SELECT CONCAT(name,'|',email) FROM users WHERE id=$AdminId;") -eq "Regression Admin|$AdminEmail")
+
+$t = Get-Token 'auth/profile.php' $admin
+Invoke-App 'POST' 'auth/profile.php' $admin @{
+    _token = $t; action = 'details'; name = 'Regression Admin'; email = 'sarah@clientflow.test'
+} | Out-Null
+Assert 'profile duplicate email rejected' ((Invoke-Sql "SELECT email FROM users WHERE id=$AdminId;") -eq $AdminEmail)
+Assert 'duplicate-email error surfaced' ((Invoke-App 'GET' 'auth/profile.php' $admin).Body -match 'already uses that email')
 
 # ---------------------------------------------------------------- 8. reports
 
@@ -970,7 +1088,10 @@ Invoke-Sql "DELETE FROM clients WHERE company_name LIKE 'Regression%'
             DELETE FROM activities WHERE title LIKE 'Regression%'
                         OR title LIKE 'Flash%';
             DELETE FROM users   WHERE email LIKE '%Regression%'
-                        OR email IN ('forced@regression.test', 'throttle@regression.test');
+                        OR email IN ('forced@regression.test', 'throttle@regression.test',
+                                     'regression-admin@clientflow.test',
+                                     'regression-staff@clientflow.test',
+                                     'regression-temp-admin@clientflow.test');
             DELETE FROM login_attempts;" | Out-Null
 
 $after = Invoke-Sql "SELECT CONCAT(
@@ -982,10 +1103,20 @@ $after = Invoke-Sql "SELECT CONCAT(
     (SELECT COUNT(*) FROM activities))"
 Assert 'row counts restored to baseline' ($after -eq $baseline) "before=$baseline after=$after"
 
-# Put the seeded forced-change flags back so the demo behaves as shipped.
-Invoke-Sql "UPDATE users SET must_change_password = 1 WHERE id IN (1,2);" | Out-Null
-Assert 'seeded accounts reflagged for password change' (
-    (Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',must_change_password) ORDER BY id) FROM users WHERE id IN (1,2);") -eq $flaggedBefore)
+# Restore the seeded accounts from the snapshot taken at startup, then prove the
+# restore worked. Asserting alone is not enough: a test that tries to demote the
+# demo admin and unexpectedly succeeds would otherwise leave it as a staff user
+# for every future run - which is exactly what happened before this snapshot
+# existed.
+foreach ($row in ($seededUsersBefore -split '\|')) {
+    $p = $row -split ':'
+    Invoke-Sql ("UPDATE users SET role = '{0}', is_active = {1}, must_change_password = {2} WHERE id = {3};" -f $p[1], $p[2], $p[3], $p[0]) | Out-Null
+}
+$seededUsersAfter = Invoke-Sql "SELECT GROUP_CONCAT(CONCAT(id,':',role,':',is_active,':',must_change_password) ORDER BY id SEPARATOR '|')
+                                 FROM users WHERE id IN (1,2,3,4);"
+Assert 'seeded accounts restored' ($seededUsersAfter -eq $seededUsersBefore) "before=$seededUsersBefore after=$seededUsersAfter"
+Assert 'no test accounts left behind' (
+    [int](Invoke-Sql "SELECT COUNT(*) FROM users WHERE email LIKE '%regression%' OR email LIKE '%@regression.test';") -eq 0)
 
 $orphans = Invoke-Sql "SELECT CONCAT(
     (SELECT COUNT(*) FROM deals d WHERE d.client_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM clients c WHERE c.id=d.client_id)), '/',
