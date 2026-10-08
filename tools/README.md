@@ -291,6 +291,42 @@ the app:
   so stripping `?type=lead` before fetching the token threw the staged plan
   away and the confirm step silently did nothing.
 
+## signup_test.ps1
+
+58 assertions over workspace creation and the first-run welcome screen.
+
+```powershell
+# XAMPP running, project in htdocs
+powershell -ExecutionPolicy Bypass -File tools\signup_test.ps1
+```
+
+Signup is the only endpoint reachable with no session, so this suite thinks
+about abuse rather than just correctness: throttling (both limits, and that a
+fresh cookie jar does not reset them), slug allocation not leaking which slugs
+exist, one-transaction creation of workspace plus owner, the new workspace being
+empty and correctly scoped, validation, and the welcome screen showing once.
+
+Verified by breaking it on purpose: disabling `signup_locked_out()` fails 4
+assertions, and making slug allocation stop de-duplicating fails 2.
+
+### Three ways this suite throttled itself
+
+Worth recording, because each one looked like an application bug:
+
+- The per-IP limit is 5/hour and the validation section makes six signups from
+  one IP, so the last is correctly refused. The suite now resets counters between
+  sections, and says why.
+- An assertion meant to prove "a fresh session does not reset the limit" first
+  deleted the `signup_attempts` rows — which of course reset it. That tested the
+  database delete. It now only opens a new cookie jar.
+- The password variable was called `$pass`. At script scope that is the same
+  variable as `$script:pass`, the pass counter, so the suite ran with a string
+  where a number was expected.
+
+And one general trap: `Write-Output` inside a helper that callers assign the
+result of does not reach the console — it lands in their variable instead. Use
+`Write-Host` for tracing.
+
 ## backup.ps1
 
 Dumps the database to a timestamped `.sql` file. There is no export button in

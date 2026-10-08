@@ -191,6 +191,8 @@ ClientFlow/
 │
 ├── index.php                     # public landing page — no sign-in required
 ├── dashboard.php                 # the app, behind require_login()
+├── signup.php                    # public: create a workspace
+├── welcome.php                   # first-run screen after signup
 │
 ├── auth/                         # sign in, sign out, my profile
 │   ├── login.php
@@ -288,6 +290,7 @@ ClientFlow/
 │   ├── settings_test.ps1         # 43 checks for per-workspace settings
 │   ├── export_test.ps1           # 53 checks for CSV export
 │   ├── import_test.ps1           # 62 checks for CSV import
+│   ├── signup_test.ps1           # 58 checks for signup and throttling
 │   ├── check_tenancy.ps1         # static: no query without a tenant filter
 │   ├── backup.ps1                # mysqldump to a timestamped file
 │   └── README.md
@@ -295,7 +298,8 @@ ClientFlow/
 ├── migrations/                   # ALTER scripts for existing installs
 │   ├── 001_login_hardening.sql
 │   ├── 002_soft_delete.sql
-│   └── 003_multi_tenancy.sql
+│   └──  003_multi_tenancy.sql
+│   └──  004_signup.sql
 │
 ├── .htaccess                     # access rules and legacy URL redirects
 ├── .gitignore  .gitattributes
@@ -774,12 +778,15 @@ from `migrations/`, imported in order through phpMyAdmin:
 | `001_login_hardening.sql`     | `users.must_change_password`, `login_attempts`      |
 | `002_soft_delete.sql`         | `deleted_at` / `deleted_by` on the five record tables |
 | `003_multi_tenancy.sql`       | `tenants`, `tenant_id` on every record table, per-tenant email uniqueness |
+| `004_signup.sql`             | `signup_attempts`, `tenants.onboarded_at` |
 
 Each file is idempotent — running it twice is a no-op — and none of them drop data.
 
 > Run `003_multi_tenancy.sql` **before** deploying the multi-tenant code. The application filters
 > every query on `tenant_id` and will error without the column. It adopts your existing rows into a
 > single workspace called `my-business`, so nothing needs re-entering.
+
+> Run `004_signup.sql` before deploying `signup.php`. It will not load without `signup_attempts`.
 
 ---
 
@@ -897,6 +904,30 @@ Real-world files are handled rather than assumed away:
 Rows with errors are skipped and listed on the review screen rather than stopping the whole file.
 Duplicates are detected by email, or by name where there is no email, and skipped unless you tick a
 box asking for them.
+
+### Creating a workspace
+
+`signup.php` is public — the only page in the app that is. It creates a workspace and its first
+admin together, signs that admin straight in, and lands them on `welcome.php`.
+
+Being the one unauthenticated write path, it carries a threat model nothing else in the app needs:
+
+- **Throttled per IP (5/hour) and per email (3/hour)**, counted in `signup_attempts`. Without it,
+  one script could create a workspace per POST.
+- **Slugs are allocated, not chosen.** A taken slug gets a numeric suffix rather than an error, so
+  the form cannot be used to ask which slugs exist — the same reason sign-in gives a taken
+  workspace and a wrong password the identical message. If you type your own slug it *is* checked,
+  and a taken one is refused; leaving the field blank is the path that cannot leak anything.
+- **Workspace and owner are created in one transaction.** A workspace with no admin cannot be signed
+  into, and an admin with no workspace sees nothing.
+
+The new owner is signed in through `sign_in_user()`, which `attempt_login()` also uses, so the
+session shape is defined in one place rather than two.
+
+**Known limit: signup sends no email, so a workspace can be claimed with an address nobody
+controls.** This build has no mail, so there is no verification link to put in the email. The
+landing page says so rather than implying the address is confirmed. This is the first thing to add
+when mail is wired up.
 
 ### Adding a model function
 
