@@ -230,7 +230,7 @@ require __DIR__ . '/views/header.php';
                                 <td>
                                     <div class="fw-semibold"><?= e($deal['deal_title']) ?></div>
                                     <div class="small text-secondary">
-                                        <?= e($deal['client_name'] ?: $deal['lead_name'] ?: 'Unlinked') ?>
+                                        <?= e($deal['client_name'] ?: ($deal['lead_name'] ?? '') ?: 'Unlinked') ?>
                                         · <?= e($deal['owner_name'] ?: 'Unassigned') ?>
                                     </div>
                                 </td>

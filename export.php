@@ -63,7 +63,11 @@ function csv_exports(): array
     ];
 }
 
-$type  = (string) ($_GET['type'] ?? '');
+// is_string() first: ?type[]=client makes $_GET['type'] an array, and casting
+// that to a string logs "Array to string conversion" before the lookup below
+// rejects it anyway.
+$raw = $_GET['type'] ?? null;
+$type = is_string($raw) ? $raw : '';
 $all   = csv_exports();
 $valid = array_key_exists($type, $all);
 

@@ -59,6 +59,7 @@ require_once __DIR__ . '/models/ListQuery.php';
 require_once __DIR__ . '/models/SoftDeleteModel.php';
 require_once __DIR__ . '/models/LoginAttemptModel.php';
 require_once __DIR__ . '/models/TenantModel.php';
+require_once __DIR__ . '/models/ImportModel.php';
 require_once __DIR__ . '/models/UserModel.php';
 require_once __DIR__ . '/models/ClientModel.php';
 require_once __DIR__ . '/models/LeadModel.php';

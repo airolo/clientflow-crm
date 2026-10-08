@@ -37,6 +37,7 @@ $pageActions = [
     ['label' => 'Add client', 'href' => 'clients/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
     // Exports every client in the workspace, not just the current page. Scoped
     // to this workspace server-side; the ?type= here only chooses the columns.
+    ['label' => 'Import', 'href' => 'import.php?type=client', 'variant' => 'outline-secondary', 'icon' => 'bi-upload'],
     ['label' => 'Export CSV', 'href' => 'export.php?type=client', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 

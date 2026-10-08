@@ -37,6 +37,7 @@ $activeNav    = 'leads';
 $breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Leads' => null];
 $pageActions = [
     ['label' => 'Add lead', 'href' => 'leads/form.php', 'variant' => 'primary', 'icon' => 'bi-plus-lg'],
+    ['label' => 'Import', 'href' => 'import.php?type=lead', 'variant' => 'outline-secondary', 'icon' => 'bi-upload'],
     ['label' => 'Export CSV', 'href' => 'export.php?type=lead', 'variant' => 'outline-secondary', 'icon' => 'bi-download'],
 ];
 

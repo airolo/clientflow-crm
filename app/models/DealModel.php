@@ -205,10 +205,15 @@ function deal_value_won_lost(): array
 /** Top open deals for the dashboard. */
 function deal_top_open(int $limit = 5): array
 {
+    // l.lead_name is selected because the dashboard falls back to it for a deal
+    // with no client. Without the join that fallback read an undefined key and
+    // logged a warning on every page load, which is how it stayed unnoticed:
+    // the demo data all had clients.
     $stmt = db()->prepare(
-        'SELECT d.*, c.company_name AS client_name, u.name AS owner_name
+        'SELECT d.*, c.company_name AS client_name, l.lead_name, u.name AS owner_name
          FROM deals d
          LEFT JOIN clients c ON c.id = d.client_id AND c.tenant_id = d.tenant_id
+         LEFT JOIN leads   l ON l.id = d.lead_id AND l.tenant_id = d.tenant_id
          LEFT JOIN users   u ON u.id = d.assigned_to AND u.tenant_id = d.tenant_id
          WHERE d.tenant_id = ? AND d.deleted_at IS NULL
            AND d.stage IN ("new_lead","contacted","proposal","negotiation")
