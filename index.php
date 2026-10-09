@@ -626,16 +626,7 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
                     </li>
                 </ol>
 
-                <div class="lp-callout mt-4">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <div>
-                        <strong>One thing before your first import.</strong>
-                        <code>database.sql</code> opens with <code>DROP TABLE</code>, so importing it
-                        over an existing workspace erases everything in it. The in-app exports get
-                        your records out, but if you are about to re-import anything, take a proper
-                        backup first with <code>tools/backup.ps1</code>.
-                    </div>
-                </div>
+        
 
                 <p class="lp-fine text-center mt-4 mb-3">
                     Nothing is charged, and nothing is emailed to you &mdash; you are signed in
