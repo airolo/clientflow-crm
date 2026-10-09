@@ -406,6 +406,44 @@ Assert 'landing page no longer claims CSV export is missing' (-not ($marketing -
 Assert 'landing page no longer claims there is no in-app export' (-not ($marketing -match 'no in-app export|no export button|there is no export'))
 Assert 'landing page offers workspace signup' ($marketing -match 'signup\.php')
 
+# ---------------------------------------------------------------------------
+# Nav links drive the "What it does" tabs.
+#
+# Preview, How it works and FAQ used to point at #preview, #workflow and #faq -
+# none of which match any id on the page, so they went nowhere. Nothing caught it
+# because the assertions above checked that the TABS exist, never that the links
+# resolve. Both halves are asserted now: the data attribute the script reads, and
+# the id it depends on.
+foreach ($t in @('features', 'preview', 'workflow', 'faq')) {
+    Assert "nav link drives the $t tab" ($marketing -match ('data-tab-target="' + $t + '"'))
+    Assert "panel-$t exists for that link" ($marketing -match ('id="panel-' + $t + '"'))
+    Assert "tab-$t button exists"        ($marketing -match ('id="tab-' + $t + '"'))
+}
+
+# No dead anchors left anywhere on the page. Every href="#..." must resolve to an
+# element id that is actually present, which is the check whose absence let this
+# bug through in the first place.
+$anchorTargets = @([regex]::Matches($marketing, 'href="#([A-Za-z0-9_-]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$elementIds    = @([regex]::Matches($marketing, '\sid="([A-Za-z0-9_-]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+foreach ($target in $anchorTargets) {
+    Assert "anchor #$target resolves to an element" ($elementIds -contains $target)
+}
+
+# The old dead targets specifically, so the regression is named rather than only
+# being implied by the loop above.
+foreach ($dead in @('preview', 'workflow', 'faq')) {
+    Assert "no dead #${dead} anchor remains" (-not ($marketing -match ('href="#' + $dead + '"')))
+}
+
+# The behaviour needs an external script: the CSP is script-src 'self', so an
+# inline handler or an inline <script> would be blocked by the browser as well as
+# by the assertions further up.
+Assert 'landing page loads landing.js' ($marketing -match 'assets/js/landing\.js')
+$jsStatus = Get-Status 'assets/js/landing.js'
+Assert 'landing.js is web-accessible' ($jsStatus -eq 200) "status=$jsStatus"
+Assert 'landing.js drives tabs through the Bootstrap Tab API' `
+       ((Get-Content (Join-Path $ProjectRoot 'assets\js\landing.js') -Raw) -match 'bootstrap\.Tab\.getOrCreateInstance')
+
 # Screenshots must actually resolve, not fall back to the placeholder.
 foreach ($shot in @('dashboard', 'clients', 'client', 'pipeline', 'reports', 'recycle')) {
     $r = Invoke-App 'GET' "assets/img/$shot.png" $anon

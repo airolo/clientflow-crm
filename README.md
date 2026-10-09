@@ -277,7 +277,8 @@ ClientFlow/
 ├── assets/
 │   ├── css/style.css              #   the signed-in shell
 │   ├── css/landing.css            #   layered on top, for index.php only
-│   ├── js/app.js
+│   ├── js/app.js                  #   signed-in behaviour
+│   ├── js/landing.js              #   index.php only: header links drive the tabs
 │   ├── img/                       # landing-page screenshots of this app
 │   └── vendor/                    # Bootstrap 5 + Icons, vendored for offline use
 │       ├── css/  js/  fonts/
@@ -484,6 +485,24 @@ page reads, which `regression.ps1` checks.
 the file — feature bullets, workflow steps, FAQ entries. It never calls a model function. That is
 deliberate: a public page that is indexed, cached or scraped must not be able to expose a
 customer's name, and "it does not query the database" is a guarantee rather than a review item.
+
+**The nav drives the tabs, and needed its own script for it.** The *Preview*, *How it works* and *FAQ*
+links used to point at `#preview`, `#workflow` and `#faq` — none of which match any `id` on the page,
+so all three went nowhere. The footer had the same dead `#faq` link. `regression.ps1` never caught it
+because it asserted the *tabs exist*, never that nav anchors *resolve*; it now asserts both, for
+every `href="#…"` on the page.
+
+`assets/js/landing.js` does the switching. It could not be done in markup for two reasons: the CSP is
+`script-src 'self'`, so there are no inline handlers and no inline `<script>`; and the panels are
+driven by `data-bs-toggle="tab"`, which Bootstrap activates from a click on a `<button>`, while these
+are `<a>` elements — only the Tab API can move them programmatically.
+
+The links carry `href="#features"` and a `data-tab-target`. That `href` is the **no-JavaScript
+fallback**: without JS the link still lands on the right section, just on the default tab. Strictly
+better than the dead anchors it replaces. `preventDefault()` is not optional — letting the default
+run would push `#features` into the address bar on every click, and the hash is deliberately left
+alone so Back and Forward do not walk through the tabs. An incoming `#panel-faq` link does open that
+tab on load, so a shared URL works.
 
 **It claims only what the app does.** The Integrations tab is split into what ships and a
 *Not built yet* list, and the FAQ answers the awkward ones directly — including that there is no
@@ -730,6 +749,7 @@ paths.
 | Table columns | `select` in that `list_query()` config, plus the `<thead>` in the page |
 | Dashboard tiles | the `$tiles` array near the top of `dashboard.php` |
 | Confirmation dialogs | `assets/js/app.js` (`data-confirm` on any button or link) |
+| Landing-page nav tabs | `assets/js/landing.js` (`data-tab-target` on the header link) |
 
 ---
 

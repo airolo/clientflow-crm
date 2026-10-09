@@ -253,11 +253,18 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
         </a>
         <nav class="lp-nav-links d-none d-md-flex ms-auto" aria-label="Sections">
             <a href="#about">Overview</a>
-            <a href="#features">Features</a>
-            <a href="#preview">Preview</a>
-            <a href="#workflow">How it works</a>
+            <!--
+                href="#features" on the tab links below is the no-JavaScript
+                fallback: it lands on the right section, just on the default tab.
+                assets/js/landing.js reads data-tab-target to open the tab itself.
+                It cannot be done in markup because these are <a> elements and
+                the panels are driven by Bootstrap's tab script.
+            -->
+            <a href="#features" data-tab-target="features">Features</a>
+            <a href="#features" data-tab-target="preview">Preview</a>
+            <a href="#features" data-tab-target="workflow">How it works</a>
             <a href="#setup">Get Started</a>
-            <a href="#faq">FAQ</a>
+            <a href="#features" data-tab-target="faq">FAQ</a>
         </nav>
         <div class="d-flex gap-2 ms-md-0 ms-auto">
             <?php if ($isSignedIn): ?>
@@ -677,7 +684,7 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
                         <a href="<?= e(url('index.php')) ?>">Home</a>
                     <?php endif; ?>
                     &nbsp;&middot;&nbsp;
-                    <a href="#faq">FAQ</a>
+                    <a href="#features" data-tab-target="faq">FAQ</a>
                 </p>
             </div>
         </div>
@@ -685,5 +692,11 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
 </footer>
 
 <script src="<?= e(url('assets/vendor/js/bootstrap.bundle.min.js')) ?>"></script>
+<!--
+    Loaded after the Bootstrap bundle because landing.js calls the Tab API.
+    External rather than inline because the CSP is script-src 'self'; see the
+    note above the nav links.
+-->
+<script src="<?= e(url('assets/js/landing.js')) ?>"></script>
 </body>
 </html>
