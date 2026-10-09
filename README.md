@@ -528,11 +528,23 @@ minute and become its first admin.
 
 **The CTAs were incoherent and are now consolidated.** The navbar previously had a *Create
 workspace* button, a *Get started* button, and a nav link labelled *Run it yourself* — two of them
-pointing at the same anchor under different names, and the hero repeating it. Now: hero offers *Get
-Started* (scrolls to the section) and *Sign in*; the navbar offers *Sign in* and *Create workspace*;
-one *Create a workspace* button sits at the foot of the Get Started section pointing at `signup.php`.
-The cost is that the primary call to action no longer goes straight to signup — it is two clicks.
-That is inherent to putting the steps ahead of the button.
+pointing at the same anchor under different names, and the hero repeating it. There is now exactly one
+*Get Started* target per surface and no duplicate:
+
+| Where | What it offers |
+|---|---|
+| Hero | *Get Started* (scrolls to the section) and *Sign in* |
+| Navbar buttons | *Sign in* and *Get Started* (`#setup`) |
+| Navbar links | Overview, Features, Preview, How it works, FAQ |
+| Foot of the Get Started section | *Create a workspace* → `signup.php` |
+
+The navbar button is *Get Started* rather than *Create workspace* deliberately: the section it points
+at is what explains how to get going, and that section ends with the signup button. So the button
+leads a reader through the explanation rather than skipping past it to a form.
+
+The cost is that the primary call to action no longer goes straight to `signup.php` — it is two
+clicks. That is inherent to putting the steps ahead of the button, and `signup.php` is still linked
+from the section itself, so it is never more than one scroll away.
 
 **Two stale claims were removed in that rewrite**, and both had been sitting there while the
 features they denied existed:

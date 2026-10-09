@@ -263,7 +263,6 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
             <a href="#features" data-tab-target="features">Features</a>
             <a href="#features" data-tab-target="preview">Preview</a>
             <a href="#features" data-tab-target="workflow">How it works</a>
-            <a href="#setup">Get Started</a>
             <a href="#features" data-tab-target="faq">FAQ</a>
         </nav>
         <div class="d-flex gap-2 ms-md-0 ms-auto">
@@ -273,7 +272,13 @@ $pageTitle = 'ClientFlow CRM - every customer, lead and deal in one place';
                 </a>
             <?php else: ?>
                 <a class="btn btn-outline-secondary btn-sm px-3" href="<?= e(url('auth/login.php')) ?>">Sign in</a>
-                <a class="btn btn-primary btn-sm px-3" href="<?= e(url('signup.php')) ?>">Create workspace</a>
+                <!--
+                    Get Started, not "Create workspace". The section it points at
+                    is what explains how to get going, and it ends with the
+                    signup button - so this leads there rather than skipping
+                    past the explanation to the form.
+                -->
+                <a class="btn btn-primary btn-sm px-3" href="#setup">Get Started</a>
             <?php endif; ?>
         </div>
     </div>
