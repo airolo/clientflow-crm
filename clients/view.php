@@ -34,11 +34,11 @@ $pageSubtitle = $client['contact_person'] . ' · ' . ($client['email'] ?: 'no em
 $activeNav   = 'clients';
 $breadcrumbs = ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', $client['company_name'] => null];
 $pageActions = [
-    ['label' => 'Log activity', 'href' => "activity_form.php?client_id=$id", 'icon' => 'bi-plus-lg'],
-    ['label' => 'Add task', 'href' => "task_form.php?client_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
+    ['label' => 'Log activity', 'href' => "activities/form.php?client_id=$id", 'icon' => 'bi-plus-lg'],
+    ['label' => 'Add task', 'href' => "tasks/form.php?client_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
 ];
 if ($canEdit) {
-    $pageActions[] = ['label' => 'Edit', 'href' => "client_form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
+    $pageActions[] = ['label' => 'Edit', 'href' => "clients/form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
 }
 
 require __DIR__ . '/../views/header.php';
@@ -102,7 +102,7 @@ require __DIR__ . '/../views/header.php';
                 <a href="<?= url('pipeline/form.php') ?>?client_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Add</a>
             </div>
             <?php if (!$deals): ?>
-                <?= empty_state('bi-kanban', 'No deals', 'Create a deal to start tracking revenue for this client.', 'deal_form.php?client_id=' . $id, 'Add deal') ?>
+                <?= empty_state('bi-kanban', 'No deals', 'Create a deal to start tracking revenue for this client.', 'pipeline/form.php?client_id=' . $id, 'Add deal') ?>
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php foreach ($deals as $deal): ?>
@@ -155,7 +155,7 @@ require __DIR__ . '/../views/header.php';
                 <a href="<?= url('tasks/form.php') ?>?client_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Add task</a>
             </div>
             <?php if (!$tasks): ?>
-                <?= empty_state('bi-check2-square', 'No tasks yet', 'Add a follow-up so nothing slips on this account.', 'task_form.php?client_id=' . $id, 'Add task') ?>
+                <?= empty_state('bi-check2-square', 'No tasks yet', 'Add a follow-up so nothing slips on this account.', 'tasks/form.php?client_id=' . $id, 'Add task') ?>
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php foreach ($tasks as $task):
@@ -166,7 +166,7 @@ require __DIR__ . '/../views/header.php';
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="<?= $task['status'] === 'completed' ? 'reopen' : 'complete' ?>">
                                 <input type="hidden" name="id" value="<?= (int) $task['id'] ?>">
-                                <input type="hidden" name="return" value="client_view.php?id=<?= $id ?>">
+                                <input type="hidden" name="return" value="clients/view.php?id=<?= $id ?>">
                                 <button type="submit" class="btn btn-sm <?= $task['status'] === 'completed' ? 'btn-light border' : 'btn-outline-success' ?>"
                                         title="<?= $task['status'] === 'completed' ? 'Reopen task' : 'Mark complete' ?>">
                                     <i class="bi <?= $task['status'] === 'completed' ? 'bi-arrow-counterclockwise' : 'bi-check-lg' ?>"></i>
@@ -205,7 +205,7 @@ require __DIR__ . '/../views/header.php';
             </div>
             <div class="card-body">
                 <?php if (!$activities): ?>
-                    <?= empty_state('bi-clock-history', 'No activity recorded', 'Log calls, emails, meetings and notes to build the relationship history.', 'activity_form.php?client_id=' . $id, 'Log activity') ?>
+                    <?= empty_state('bi-clock-history', 'No activity recorded', 'Log calls, emails, meetings and notes to build the relationship history.', 'activities/form.php?client_id=' . $id, 'Log activity') ?>
                 <?php else: ?>
                     <div class="timeline">
                         <?php foreach ($activities as $activity):

@@ -22,10 +22,10 @@ $allowedReturns = ['activities/index.php', 'dashboard.php'];
 if ($id > 0) {
     $activityRow = activity_find($id);
     if ($activityRow && $activityRow['client_id']) {
-        $allowedReturns[] = 'client_view.php?id=' . (int) $activityRow['client_id'];
+        $allowedReturns[] = 'clients/view.php?id=' . (int) $activityRow['client_id'];
     }
     if ($activityRow && $activityRow['lead_id']) {
-        $allowedReturns[] = 'lead_view.php?id=' . (int) $activityRow['lead_id'];
+        $allowedReturns[] = 'leads/view.php?id=' . (int) $activityRow['lead_id'];
     }
 }
 if (!in_array($return, $allowedReturns, true)) {

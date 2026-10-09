@@ -32,12 +32,12 @@ $pageSubtitle = ($lead['company'] ?: 'No company') . ' · ' . pretty($lead['lead
 $activeNav    = 'leads';
 $breadcrumbs  = ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => null];
 $pageActions = [
-    ['label' => 'Create deal', 'href' => "deal_form.php?lead_id=$id", 'icon' => 'bi-kanban'],
-    ['label' => 'Add task', 'href' => "task_form.php?lead_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
-    ['label' => 'Log activity', 'href' => "activity_form.php?lead_id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-clock-history'],
+    ['label' => 'Create deal', 'href' => "pipeline/form.php?lead_id=$id", 'icon' => 'bi-kanban'],
+    ['label' => 'Add task', 'href' => "tasks/form.php?lead_id=$id", 'variant' => 'outline-primary', 'icon' => 'bi-check2-square'],
+    ['label' => 'Log activity', 'href' => "activities/form.php?lead_id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-clock-history'],
 ];
 if ($canEdit) {
-    $pageActions[] = ['label' => 'Edit', 'href' => "lead_form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
+    $pageActions[] = ['label' => 'Edit', 'href' => "leads/form.php?id=$id", 'variant' => 'outline-secondary', 'icon' => 'bi-pencil'];
 }
 
 require __DIR__ . '/../views/header.php';
@@ -94,7 +94,7 @@ require __DIR__ . '/../views/header.php';
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="status">
                         <input type="hidden" name="id" value="<?= (int) $id ?>">
-                        <input type="hidden" name="return" value="lead_view.php?id=<?= $id ?>">
+                        <input type="hidden" name="return" value="leads/view.php?id=<?= $id ?>">
                         <select name="status" class="form-select form-select-sm">
                             <?= select_options(lead_statuses(), $lead['status']) ?>
                         </select>
@@ -112,7 +112,7 @@ require __DIR__ . '/../views/header.php';
                 <a href="<?= url('pipeline/form.php') ?>?lead_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Add</a>
             </div>
             <?php if (!$deals): ?>
-                <?= empty_state('bi-kanban', 'Not converted yet', 'Turn this lead into a deal to start tracking it on the pipeline.', 'deal_form.php?lead_id=' . $id, 'Create deal') ?>
+                <?= empty_state('bi-kanban', 'Not converted yet', 'Turn this lead into a deal to start tracking it on the pipeline.', 'pipeline/form.php?lead_id=' . $id, 'Create deal') ?>
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php foreach ($deals as $deal): ?>
@@ -150,7 +150,7 @@ require __DIR__ . '/../views/header.php';
                 <a href="<?= url('tasks/form.php') ?>?lead_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Add task</a>
             </div>
             <?php if (!$tasks): ?>
-                <?= empty_state('bi-check2-square', 'No follow-ups', 'Schedule a call or send the proposal to keep momentum.', 'task_form.php?lead_id=' . $id, 'Add task') ?>
+                <?= empty_state('bi-check2-square', 'No follow-ups', 'Schedule a call or send the proposal to keep momentum.', 'tasks/form.php?lead_id=' . $id, 'Add task') ?>
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php foreach ($tasks as $task):
@@ -161,7 +161,7 @@ require __DIR__ . '/../views/header.php';
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="<?= $task['status'] === 'completed' ? 'reopen' : 'complete' ?>">
                                 <input type="hidden" name="id" value="<?= (int) $task['id'] ?>">
-                                <input type="hidden" name="return" value="lead_view.php?id=<?= $id ?>">
+                                <input type="hidden" name="return" value="leads/view.php?id=<?= $id ?>">
                                 <button type="submit" class="btn btn-sm <?= $task['status'] === 'completed' ? 'btn-light border' : 'btn-outline-success' ?>"
                                         title="<?= $task['status'] === 'completed' ? 'Reopen' : 'Mark complete' ?>">
                                     <i class="bi <?= $task['status'] === 'completed' ? 'bi-arrow-counterclockwise' : 'bi-check-lg' ?>"></i>
@@ -200,7 +200,7 @@ require __DIR__ . '/../views/header.php';
             </div>
             <div class="card-body">
                 <?php if (!$activities): ?>
-                    <?= empty_state('bi-clock-history', 'No activity recorded', 'Track every call, email and meeting with this lead.', 'activity_form.php?lead_id=' . $id, 'Log activity') ?>
+                    <?= empty_state('bi-clock-history', 'No activity recorded', 'Track every call, email and meeting with this lead.', 'activities/form.php?lead_id=' . $id, 'Log activity') ?>
                 <?php else: ?>
                     <div class="timeline">
                         <?php foreach ($activities as $activity):

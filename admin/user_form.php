@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     redirect_with_errors(
-        $isEdit ? 'user_form.php?id=' . $id : 'admin/users.php',
+        $isEdit ? 'admin/user_form.php?id=' . $id : 'admin/users.php',
         $errors,
         $_POST
     );

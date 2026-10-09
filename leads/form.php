@@ -49,16 +49,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         if ($isEdit) {
             lead_update($id, $data);
-            flash_success('Lead "' . $data['lead_name'] . '" was updated.', 'lead_view.php?id=' . $id);
+            flash_success('Lead "' . $data['lead_name'] . '" was updated.', 'leads/view.php?id=' . $id);
         } else {
             $data['created_by'] = $userId;
             $newId = lead_create($data);
-            flash_success('Lead "' . $data['lead_name'] . '" was created.', 'lead_view.php?id=' . $newId);
+            flash_success('Lead "' . $data['lead_name'] . '" was created.', 'leads/view.php?id=' . $newId);
         }
     }
 
     redirect_with_errors(
-        $isEdit ? 'lead_form.php?id=' . $id : 'leads/form.php',
+        $isEdit ? 'leads/form.php?id=' . $id : 'leads/form.php',
         $errors,
         $_POST
     );
@@ -70,11 +70,11 @@ $pageHeading = $isEdit ? 'Edit lead' : 'Add lead';
 $pageSubtitle = $isEdit ? $lead['lead_name'] : 'Capture a new prospect';
 $activeNav   = 'leads';
 $breadcrumbs = $isEdit
-    ? ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => 'lead_view.php?id=' . $id, 'Edit' => null]
+    ? ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', $lead['lead_name'] => 'leads/view.php?id=' . $id, 'Edit' => null]
     : ['Dashboard' => 'dashboard.php', 'Leads' => 'leads/index.php', 'Add' => null];
 $pageActions = [[
     'label' => 'Back',
-    'href' => $isEdit ? "lead_view.php?id=$id" : 'leads/index.php',
+    'href' => $isEdit ? 'leads/view.php?id=' . $id : 'leads/index.php',
     'variant' => 'light border',
     'icon' => 'bi-arrow-left',
 ]];
@@ -209,7 +209,13 @@ require __DIR__ . '/../views/header.php';
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save changes' : 'Create lead' ?>
                     </button>
-                    <a href="<?= $isEdit ? 'lead_view.php?id=' . $id : 'leads/index.php' ?>" class="btn btn-light border">Cancel</a>
+                    <!--
+                        Real paths, not the lead_view.php short alias. That alias
+                        exists only as an .htaccess rewrite, so it 404s on any
+                        server that does not read one (php -S, for one).
+                    -->
+                    <a href="<?= e(url($isEdit ? 'leads/view.php?id=' . $id : 'leads/index.php')) ?>"
+                       class="btn btn-light border">Cancel</a>
                 </div>
             </div>
         </div>

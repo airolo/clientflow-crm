@@ -193,7 +193,7 @@ else:
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= (int) $deal['id'] ?>">
-                                        <input type="hidden" name="return" value="pipeline.php">
+                                        <input type="hidden" name="return" value="pipeline/index.php">
                                         <button type="submit" class="btn btn-outline-danger border-0"
                                                 data-confirm="Delete deal &quot;<?= e($deal['deal_title']) ?>&quot;?"
                                                 title="Delete deal">
@@ -208,7 +208,7 @@ else:
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="move">
                                     <input type="hidden" name="id" value="<?= (int) $deal['id'] ?>">
-                                    <input type="hidden" name="return" value="pipeline.php?assigned_to=<?= $ownerFilter ?>">
+                                    <input type="hidden" name="return" value="pipeline/index.php?assigned_to=<?= $ownerFilter ?>">
                                     <div class="input-group input-group-sm">
                                         <select name="stage" class="form-select form-select-sm" aria-label="Move deal to stage">
                                             <?= select_options($stages, $deal['stage']) ?>

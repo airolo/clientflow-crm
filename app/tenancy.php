@@ -90,13 +90,13 @@ function require_active_tenant(): void
         // half-authenticated state.
         logout_user();
         flash('danger', 'That workspace is no longer available. Please sign in again.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 
     if ($tenant['status'] !== 'active') {
         logout_user();
         flash('danger', 'This workspace has been suspended. Please contact support.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 
     // After the status check, so a suspended workspace cannot change the app's

@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     redirect_with_errors(
-        $isEdit ? 'task_form.php?id=' . $id : 'tasks/form.php',
+        $isEdit ? 'tasks/form.php?id=' . $id : 'tasks/form.php',
         $errors,
         $_POST
     );

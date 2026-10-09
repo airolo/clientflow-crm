@@ -38,7 +38,7 @@ require __DIR__ . '/views/header.php';
         ['label' => 'Open deals', 'value' => $summary['open_deals'], 'hint' => money_short($summary['open_deal_value']) . ' in play',
          'icon' => 'bi-kanban-fill', 'tint' => 'warning', 'link' => 'pipeline/index.php'],
         ['label' => 'Won deals', 'value' => $summary['won_deals'], 'hint' => money_short($summary['won_value']) . ' revenue',
-         'icon' => 'bi-trophy-fill', 'tint' => 'success', 'link' => 'pipeline.php?stage=won'],
+         'icon' => 'bi-trophy-fill', 'tint' => 'success', 'link' => 'pipeline/index.php?stage=won'],
         ['label' => 'Pending tasks', 'value' => $summary['pending_tasks'],
          'hint' => $summary['overdue_tasks'] . ' overdue', 'icon' => 'bi-check2-square', 'tint' => 'danger', 'link' => 'tasks/index.php'],
         ['label' => 'Interactions logged', 'value' => $summary['activities'], 'hint' => 'Calls, emails, meetings, notes',
@@ -47,7 +47,13 @@ require __DIR__ . '/views/header.php';
     foreach ($tiles as $tile):
     ?>
         <div class="col-12 col-sm-6 col-xl-4">
-            <a href="<?= e($tile['link']) ?>" class="text-decoration-none text-reset">
+            <!--
+                url(), not e(). Without APP_URL a relative href resolves
+                against the current URL, so every tile breaks the moment the
+                app is served from a subfolder - and "clients/index.php" from
+                a page at /dashboard.php becomes /clients/index.php.
+            -->
+            <a href="<?= e(url($tile['link'])) ?>" class="text-decoration-none text-reset">
                 <div class="stat-card">
                     <div class="stat-icon bg-tint-<?= e($tile['tint']) ?>"><i class="bi <?= e($tile['icon']) ?>"></i></div>
                     <div class="min-w-0">
@@ -261,8 +267,8 @@ require __DIR__ . '/views/header.php';
                             [$typeLabel, $typeIcon] = activity_icon($activity['type']);
                             $subject = $activity['company_name'] ?: $activity['lead_name'] ?: 'Internal update';
                             $subjectLink = $activity['client_id']
-                                ? 'client_view.php?id=' . (int) $activity['client_id']
-                                : ($activity['lead_id'] ? 'lead_view.php?id=' . (int) $activity['lead_id'] : null);
+                                ? 'clients/view.php?id=' . (int) $activity['client_id']
+                                : ($activity['lead_id'] ? 'leads/view.php?id=' . (int) $activity['lead_id'] : null);
                         ?>
                             <div class="timeline-item">
                                 <div class="timeline-dot <?= e($activity['type']) ?>"><i class="bi <?= e($typeIcon) ?>"></i></div>

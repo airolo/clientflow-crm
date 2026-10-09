@@ -24,10 +24,10 @@ $return = post_str('return', 'tasks/index.php');
 $allowedReturns = ['tasks/index.php', 'dashboard.php'];
 if ($taskRow = ($id > 0 ? task_find($id) : null)) {
     if ($taskRow['client_id']) {
-        $allowedReturns[] = 'client_view.php?id=' . (int) $taskRow['client_id'];
+        $allowedReturns[] = 'clients/view.php?id=' . (int) $taskRow['client_id'];
     }
     if ($taskRow['lead_id']) {
-        $allowedReturns[] = 'lead_view.php?id=' . (int) $taskRow['lead_id'];
+        $allowedReturns[] = 'leads/view.php?id=' . (int) $taskRow['lead_id'];
     }
 }
 if (!in_array($return, $allowedReturns, true)) {

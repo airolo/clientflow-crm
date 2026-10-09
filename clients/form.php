@@ -51,16 +51,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         if ($isEdit) {
             client_update($id, $data);
-            flash_success('Client "' . $data['company_name'] . '" was updated.', 'client_view.php?id=' . $id);
+            flash_success('Client "' . $data['company_name'] . '" was updated.', 'clients/view.php?id=' . $id);
         } else {
             $data['created_by'] = $userId;
             $newId = client_create($data);
-            flash_success('Client "' . $data['company_name'] . '" was created.', 'client_view.php?id=' . $newId);
+            flash_success('Client "' . $data['company_name'] . '" was created.', 'clients/view.php?id=' . $newId);
         }
     }
 
     redirect_with_errors(
-        $isEdit ? 'client_form.php?id=' . $id : 'clients/form.php',
+        $isEdit ? 'clients/form.php?id=' . $id : 'clients/form.php',
         $errors,
         $_POST
     );
@@ -74,11 +74,11 @@ $pageSubtitle = $isEdit
     : 'Create a new client account';
 $activeNav   = 'clients';
 $breadcrumbs = $isEdit
-    ? ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', $client['company_name'] => 'client_view.php?id=' . $id, 'Edit' => null]
+    ? ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', $client['company_name'] => 'clients/view.php?id=' . $id, 'Edit' => null]
     : ['Dashboard' => 'dashboard.php', 'Clients' => 'clients/index.php', 'Add' => null];
 $pageActions = [[
     'label' => 'Back',
-    'href' => $isEdit ? "client_view.php?id=$id" : 'clients/index.php',
+    'href' => $isEdit ? 'clients/view.php?id=' . $id : 'clients/index.php',
     'variant' => 'light border',
     'icon' => 'bi-arrow-left',
 ]];
@@ -212,7 +212,13 @@ require __DIR__ . '/../views/header.php';
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save changes' : 'Create client' ?>
                     </button>
-                    <a href="<?= $isEdit ? 'client_view.php?id=' . $id : 'clients/index.php' ?>" class="btn btn-light border">Cancel</a>
+                    <!--
+                        Real paths, not the client_view.php short alias. That
+                        alias exists only as an .htaccess rewrite, so it 404s on
+                        any server that does not read one (php -S, for one).
+                    -->
+                    <a href="<?= e(url($isEdit ? 'clients/view.php?id=' . $id : 'clients/index.php')) ?>"
+                       class="btn btn-light border">Cancel</a>
                 </div>
             </div>
         </div>

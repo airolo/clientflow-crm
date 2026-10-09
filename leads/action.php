@@ -21,7 +21,7 @@ $return = post_str('return', 'leads/index.php');
 // Whitelist the return path so it cannot be used as an open redirect.
 $allowedReturns = ['leads/index.php', 'dashboard.php'];
 if ($id > 0) {
-    $allowedReturns[] = 'lead_view.php?id=' . $id;
+    $allowedReturns[] = 'leads/view.php?id=' . $id;
 }
 if (!in_array($return, $allowedReturns, true)) {
     $return = 'leads/index.php';

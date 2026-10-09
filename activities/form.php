@@ -27,9 +27,9 @@ $presetLeadId   = (int) ($_GET['lead_id'] ?? $_POST['lead_id'] ?? 0);
 // open redirect.
 $returnUrl = 'activities/index.php';
 if ($presetClientId > 0) {
-    $returnUrl = 'client_view.php?id=' . $presetClientId;
+    $returnUrl = 'clients/view.php?id=' . $presetClientId;
 } elseif ($presetLeadId > 0) {
-    $returnUrl = 'lead_view.php?id=' . $presetLeadId;
+    $returnUrl = 'leads/view.php?id=' . $presetLeadId;
 }
 
 $clients  = client_options();
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     redirect_with_errors(
-        $isEdit ? 'activity_form.php?id=' . $id : 'activities/form.php',
+        $isEdit ? 'activities/form.php?id=' . $id : 'activities/form.php',
         $errors,
         $_POST
     );

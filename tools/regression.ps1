@@ -407,6 +407,54 @@ Assert 'landing page no longer claims there is no in-app export' (-not ($marketi
 Assert 'landing page offers workspace signup' ($marketing -match 'signup\.php')
 
 # ---------------------------------------------------------------------------
+# No internal link may depend on an .htaccess alias.
+#
+# `login.php`, `client_view.php` and friends exist ONLY as RewriteRules in
+# .htaccess. Under Apache that is invisible; under `php -S`, which reads no
+# .htaccess, every one of them 404s. The dashboard "Won deals" tile linked to
+# pipeline.php that way, and a signed-in user on php -S got bounced to a Not
+# Found page before reaching any record.
+#
+# So: assert that no href or redirect target in the app names a short alias.
+# A real path always contains a directory separator.
+$aliasNames = @('login.php','logout.php','profile.php','clients.php','leads.php','pipeline.php',
+                'tasks.php','activities.php','reports.php','users.php','client_form.php',
+                'client_view.php','client_action.php','lead_form.php','lead_view.php',
+                'lead_action.php','task_form.php','task_action.php','activity_form.php',
+                'activity_action.php','deal_form.php','deal_action.php')
+# Built with [char]34 rather than a backtick-escaped quote inside a double-quoted
+# string, which PowerShell mis-parses.
+$q = [char]34
+$aliasPattern = ("[" + "'" + $q + "]") + '(' + (($aliasNames | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')'
+$aliasHits = @()
+foreach ($php in Get-ChildItem -Path $ProjectRoot -Recurse -Filter *.php |
+                  Where-Object { $_.FullName -notmatch '\\vendor\\|\\tools\\|\\assets\\' }) {
+    $rel = $php.FullName.Substring($ProjectRoot.Length + 1)
+    $n = 0
+    foreach ($line in Get-Content -LiteralPath $php.FullName) {
+        $n++
+        $t = $line.Trim()
+        if ($t.StartsWith('*') -or $t.StartsWith('//') -or $t.StartsWith('<!--')) { continue }
+        # A link can be declared as an href, a redirect target, a flash return
+        # path, or a 'link' => ' entry in a config array (the dashboard tiles).
+        # Missing the last one is why an earlier version of this guard passed a
+        # page that still contained an alias.
+        if ($t -notmatch 'href=|redirect|flash|link') { continue }
+        foreach ($m in [regex]::Matches($t, $aliasPattern)) {
+            # A real path always has a directory separator before the filename.
+            if ($t.Substring(0, $m.Index) -notmatch '/$') {
+                $aliasHits += ($rel + ':L' + $n + '  ' + $t)
+            }
+        }
+    }
+}
+Assert 'no internal link relies on an .htaccess alias' ($aliasHits.Count -eq 0) ($aliasHits -join ' | ')
+
+# The dashboard tiles in particular, since that is where this was found.
+$dashSrc = Get-Content (Join-Path $ProjectRoot 'dashboard.php') -Raw
+Assert 'dashboard tiles use real paths' (-not ($dashSrc -match "'pipeline\.php|'clients\.php|'leads\.php|'tasks\.php|'activities\.php"))
+
+# ---------------------------------------------------------------------------
 # Nav links drive the "What it does" tabs.
 #
 # Preview, How it works and FAQ used to point at #preview, #workflow and #faq -
@@ -676,7 +724,9 @@ $r = Invoke-App 'POST' 'clients/form.php' $admin @{
     _token = $t; id = $cid; company_name = 'Regression Co 2'; contact_person = 'RC'
     email = 'rc@x.test'; status = 'active'; assigned_to = 3
 }
-Assert 'update client' ($r.Location -match "client_view\.php\?id=$cid$") "location=$($r.Location)"
+# The real path, not the client_view.php alias. The form redirects to
+# clients/view.php so it works on a server that does not read .htaccess.
+Assert 'update client' ($r.Location -match "clients/view\.php\?id=$cid$") "location=$($r.Location)"
 Assert 'update persisted' ((Invoke-App 'GET' "client_view.php?id=$cid" $admin).Body -match 'Regression Co 2')
 
 $t = Get-Token 'pipeline/form.php' $admin
@@ -716,7 +766,7 @@ $t = Get-Token 'activities/form.php' $admin
 $r = Invoke-App 'POST' 'activities/form.php' $admin @{
     _token = $t; client_id = $cid; type = 'call'; title = 'Regression Call'; details = 'Tested'
 }
-Assert 'create activity returns to client' ($r.Location -match "client_view\.php\?id=$cid$") "location=$($r.Location)"
+Assert 'create activity returns to client' ($r.Location -match "clients/view\.php\?id=$cid$") "location=$($r.Location)"
 $detail = Invoke-App 'GET' "client_view.php?id=$cid" $admin
 Assert 'client detail aggregates deal+task+activity' (
     ($detail.Body -match 'Regression Deal') -and

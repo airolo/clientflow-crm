@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     redirect_with_errors(
-        $isEdit ? 'deal_form.php?id=' . $id : 'pipeline/form.php',
+        $isEdit ? 'pipeline/form.php?id=' . $id : 'pipeline/form.php',
         $errors,
         $_POST
     );

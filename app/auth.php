@@ -40,7 +40,7 @@ function start_secure_session(): void
     if (isset($_SESSION['_last_activity']) && (time() - (int) $_SESSION['_last_activity'] > 7200)) {
         logout_user();
         flash('warning', 'You were signed out after a period of inactivity.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
     $_SESSION['_last_activity'] = time();
 }
@@ -231,7 +231,7 @@ function require_login(): void
 {
     if (!is_logged_in()) {
         flash('warning', 'Please sign in to continue.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 
     // Re-checks the workspace still exists and is not suspended. A tenant
