@@ -55,7 +55,11 @@ $binCount = $sidebarBinCount ?? (is_admin() ? soft_delete_count() : 0);
                         <ol class="breadcrumb small mb-0">
                             <?php foreach ($breadcrumbs as $label => $link): ?>
                                 <?php if ($link): ?>
-                                    <li class="breadcrumb-item"><a href="<?= e($link) ?>"><?= e($label) ?></a></li>
+                                    <?php /* url(), not the raw value: breadcrumbs are written
+                                             project-relative ('tasks/index.php') and render on pages
+                                             inside folders, where a bare href resolves against the
+                                             current directory. */ ?>
+                                    <li class="breadcrumb-item"><a href="<?= e(url($link)) ?>"><?= e($label) ?></a></li>
                                 <?php else: ?>
                                     <li class="breadcrumb-item active" aria-current="page"><?= e($label) ?></li>
                                 <?php endif; ?>

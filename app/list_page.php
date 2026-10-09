@@ -193,11 +193,20 @@ function render_page_actions(array $actions): void
         // 'button' is needed for modals and print; everything else is a link.
         $tag     = ($action['tag'] ?? 'a') === 'button' ? 'button' : 'a';
 
-        if ($tag === 'button') {
-            printf('<button type="button" class="btn btn-%s"', e($variant));
-        } else {
-            printf('<a href="%s" class="btn btn-%s"', e((string) ($action['href'] ?? '')), e($variant));
-        }
+if ($tag === 'button') {
+        printf('<button type="button" class="btn btn-%s"', e($variant));
+    } else {
+        // url(), not the raw href. These are written as project-relative paths
+        // ('tasks/form.php') and rendered on a page that lives in a folder
+        // (/tasks/index.php), so emitting them bare made the browser resolve
+        // them against the current directory and request /tasks/tasks/form.php.
+        // Now they are absolute from the app root on every page.
+        printf(
+            '<a href="%s" class="btn btn-%s"',
+            e(url((string) ($action['href'] ?? ''))),
+            e($variant)
+        );
+    }
         foreach ($extra as $name => $value) {
             // Only simple attribute names, to keep this an attribute map
             // rather than a way to inject markup.
@@ -217,6 +226,11 @@ function render_page_actions(array $actions): void
 
 /**
  * A table header cell. Static headers pass no link; sortable ones pass one.
+ *
+ * The link is NOT passed through url(), deliberately. Callers pass
+ * sort_href(), which returns a query-only string ('?sort=title&dir=asc') that
+ * must stay relative to the current page. Prefixing APP_URL would point every
+ * column header at the app root instead of the list being viewed.
  */
 function render_th(string $label, ?string $link = null, string $class = ''): void
 {

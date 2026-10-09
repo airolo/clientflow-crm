@@ -455,6 +455,53 @@ $dashSrc = Get-Content (Join-Path $ProjectRoot 'dashboard.php') -Raw
 Assert 'dashboard tiles use real paths' (-not ($dashSrc -match "'pipeline\.php|'clients\.php|'leads\.php|'tasks\.php|'activities\.php"))
 
 # ---------------------------------------------------------------------------
+# Every link a page renders must resolve, and must not be relative.
+#
+# render_page_actions() and the breadcrumb loop both used to emit their href
+# raw. Those values are project-relative ('tasks/form.php') and the pages live
+# in folders (/tasks/index.php), so the browser resolved them against the current
+# directory and asked for /tasks/tasks/form.php - a 404 on every list screen.
+# Fixed by routing both through url(). Asserted here by clicking the buttons.
+foreach ($listPage in @('tasks/index.php', 'clients/index.php', 'leads/index.php',
+                        'pipeline/index.php', 'activities/index.php')) {
+    $lp = Invoke-App 'GET' $listPage $admin
+    Assert "$listPage renders" ($lp.Code -eq 200) "code=$($lp.Code)"
+    $actions = [regex]::Matches($lp.Body, '<div class="page-actions">(.*?)</div>\s*<', 'Singleline')
+    Assert "$listPage has page actions" ($actions.Count -ge 1)
+    if ($actions.Count -ge 1) {
+        foreach ($a in [regex]::Matches($actions[0].Groups[1].Value, 'href="([^"]+)"')) {
+            $href = $a.Groups[1].Value
+            # Query-only hrefs stay relative by design (sort headers). Anything
+            # with a path must be absolute, or it breaks on a subfolder.
+            $isQueryOnly = $href.StartsWith('?')
+            Assert "$listPage action href is absolute" `
+                  ($isQueryOnly -or $href.StartsWith('/') -or $href -match '^https?://') "href=$href"
+            if (-not $isQueryOnly) {
+                # Invoke-App already resolves a leading-slash path against
+                # http://localhost, so the href is passed through as-is. Building
+                # "$BaseUrl$href" here produced a doubled prefix.
+                $res = Invoke-App 'GET' $href $admin
+                Assert "$listPage action resolves: $href" `
+                       (($res.Code -eq 200) -and ($res.Body -notmatch 'Not Found')) "code=$($res.Code)"
+            }
+        }
+    }
+}
+
+# The duplicated-directory shape specifically, since that is the exact failure:
+# a page requesting /tasks/tasks/anything.
+#
+# The bug is the SAME segment twice in a row, not merely two segments: every
+# legitimate href here is APP_URL + /folder/file, and APP_URL is a single
+# segment. So 'href="/tasks/tasks/' is the shape to look for, built from the
+# actual page rather than a generic two-segment pattern that would match the
+# perfectly normal /ClientFlow/tasks/form.php.
+$seg = ($listPage -split '/')[0]          # 'tasks' from 'tasks/index.php'
+Assert "no duplicated /$seg/ segment in page actions" `
+      (-not ($lp.Body -match ('href="/' + [regex]::Escape($seg) + '/' + [regex]::Escape($seg) + '/'))) `
+      ("segment=$seg")
+
+# ---------------------------------------------------------------------------
 # Nav links drive the "What it does" tabs.
 #
 # Preview, How it works and FAQ used to point at #preview, #workflow and #faq -

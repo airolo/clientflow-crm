@@ -274,7 +274,7 @@ require __DIR__ . '/views/header.php';
                                 <div class="timeline-dot <?= e($activity['type']) ?>"><i class="bi <?= e($typeIcon) ?>"></i></div>
                                 <div class="timeline-title">
                                     <?php if ($subjectLink): ?>
-                                        <a href="<?= e($subjectLink) ?>" class="text-reset"><?= e($activity['title']) ?></a>
+                                        <a href="<?= e(url($subjectLink)) ?>" class="text-reset"><?= e($activity['title']) ?></a>
                                     <?php else: ?>
                                         <?= e($activity['title']) ?>
                                     <?php endif; ?>

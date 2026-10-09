@@ -139,3 +139,16 @@ in a subfolder (`/ClientFlow`) without being configured.
 Every internal link goes through `url()`. Never write a bare relative path: it
 would break the moment a page moved between folders, which is exactly what
 happened when the project was reorganised into feature folders.
+
+That rule has been broken twice, both times the same way, so it is worth being
+precise about *why* it bites. A path like `tasks/form.php` is project-relative,
+but from `/tasks/index.php` the browser resolves it against the current
+directory and asks for `/tasks/tasks/form.php`. `render_page_actions()` and the
+breadcrumb loop in `views/header.php` both emitted their href raw, so every
+list page's buttons were 404s. They go through `url()` now, and
+`tools\regression.ps1` clicks every one of them.
+
+The one deliberate exception is `render_th()`'s sort link, which stays relative.
+`sort_href()` returns a query-only string (`?sort=title&dir=asc`) that has to
+keep working on the page you are already on; prefixing `APP_URL` would send
+every column header to the app root instead of the list being viewed.
