@@ -85,7 +85,7 @@ function lead_create(array $data): int
         $data['lead_source'],
         $data['status'],
         (float) ($data['estimated_value'] ?? 0),
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
@@ -116,7 +116,7 @@ function lead_update(int $id, array $data): void
         $data['lead_source'],
         $data['status'],
         (float) ($data['estimated_value'] ?? 0),
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         tenant_id(),
         $id,

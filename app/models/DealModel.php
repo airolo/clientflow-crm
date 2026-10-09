@@ -91,12 +91,12 @@ function deal_create(array $data): int
     $stmt->execute([
         tenant_id(),
         $data['deal_title'],
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         (float) ($data['value'] ?? 0),
         $data['stage'],
         null_if_empty($data['expected_close_date'] ?? null),
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
@@ -117,12 +117,12 @@ function deal_update(int $id, array $data): void
     );
     $stmt->execute([
         $data['deal_title'],
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         (float) ($data['value'] ?? 0),
         $data['stage'],
         null_if_empty($data['expected_close_date'] ?? null),
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         tenant_id(),
         $id,

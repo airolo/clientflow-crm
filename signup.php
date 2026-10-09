@@ -103,10 +103,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($owner !== null) {
                     sign_in_user($owner, (int) $created['tenant_id']);
 
-    // After sign_in_user, so the new workspace is the tenant in the session and
-    // the row lands in the log the account can actually see. Logged before any
-    // onboarding redirect, because that is a separate request.
-    audit_record('signup', 'tenant', (int) $created['tenant_id'], (string) $created['name']);
+                    // After sign_in_user, so the new workspace is the tenant in
+                    // the session and the row lands in the log the account can
+                    // actually see.
+                    //
+                    // The label is the workspace name from the submitted form.
+                    // tenant_create_with_owner() returns only tenant_id and
+                    // user_id, so $created['name'] does not exist - reading it
+                    // logged a PHP warning on every signup.
+                    audit_record(
+                        'signup',
+                        'tenant',
+                        (int) $created['tenant_id'],
+                        (string) $data['business_name']
+                    );
+
                     flash_success(
                         'Your workspace is ready. You are signed in as its administrator.',
                         'welcome.php'

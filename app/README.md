@@ -130,6 +130,30 @@ not its children. Requires there read `__DIR__ . '/models/...'` and
 `__DIR__ . '/config/...'`. Pages one level down use
 `__DIR__ . '/../app/bootstrap.php'`.
 
+## Chart bars have two shapes
+
+`.chart-bar-fill` is a `border-radius: 999px` **pill**, written for the thin
+horizontal progress bars (10px tall) on the dashboard and reports pages.
+
+The monthly-activity chart uses the same class for **vertical columns**, and that
+is wrong in a way that is invisible in code review. `999px` clamps to half the
+element's shortest side, so on a 105px-wide column the top corners round to ~52px
+— a dome. The taller the month, the taller the dome, so a large value reads as a
+circle rather than a bar. Measured in Edge before the fix: `w=113 h=186
+rTL=999px`.
+
+Columns therefore use `.chart-bar-fill.column`, which is square at the base and
+rounded only at the top:
+
+```css
+.chart-bar-fill.column { height: auto; border-radius: 4px 4px 0 0; }
+```
+
+`height: auto` is in that rule because the base class hard-codes
+`height: 100%`, which would otherwise override the inline `height:` percentage
+the reports page sets on each column. `regression.ps1` asserts both the CSS and
+that the reports page renders the `column` class.
+
 ## APP_URL
 
 `config/config.php` works out where the project is served from by comparing its

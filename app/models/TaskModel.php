@@ -80,12 +80,12 @@ function task_create(array $data): int
         tenant_id(),
         $data['title'],
         null_if_empty($data['description'] ?? null),
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         null_if_empty($data['due_date'] ?? null),
         $data['priority'],
         $data['status'] ?? 'pending',
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         $data['created_by'],
     ]);
     $id = (int) db()->lastInsertId();
@@ -108,12 +108,12 @@ function task_update(int $id, array $data): void
     $stmt->execute([
         $data['title'],
         null_if_empty($data['description'] ?? null),
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         null_if_empty($data['due_date'] ?? null),
         $data['priority'],
         $data['status'],
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         tenant_id(),
         $id,
     ]);

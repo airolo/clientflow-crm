@@ -355,6 +355,19 @@ foreach ($m in [regex]::Matches($landingCss, 'var\((--[a-z0-9-]+)')) {
 Assert 'every CSS variable landing.css uses is defined' ($undefinedVars.Count -eq 0) `
     "undefined: $(($undefinedVars | Sort-Object -Unique) -join ', ')"
 
+# The monthly-activity columns must NOT reuse the pill radius.
+#
+# .chart-bar-fill is a border-radius:999px pill written for the 10px horizontal
+# progress bars. The reports monthly chart reused it for vertical columns, where
+# 999px clamps to half the bar's width and turns it into a dome - so the taller
+# the value, the more it read as a circle rather than a bar. Measured in Edge:
+# 105px wide x 186px tall rendered with rTL=999px before the fix.
+Assert 'style.css defines a non-pill radius for chart columns' `
+    (($appCss -match '\.chart-bar-fill\.column\s*\{[^}]*border-radius:\s*(\d+px)') -and
+     ($Matches[1] -ne '999px')) 'chart-bar-fill.column must not use a 999px radius'
+Assert 'chart column radius is square at the base' `
+    ($appCss -match '\.chart-bar-fill\.column\s*\{[^}]*border-radius:\s*\d+px\s+\d+px\s+0\s+0')
+
 # ---------------------------------------------------------------- 2. landing page
 
 Section 'Landing page'
@@ -734,6 +747,12 @@ foreach ($page in $adminPages) {
           else { $r.Code -eq 200 -and $r.Body.Length -gt 3000 }
     Assert "admin $page" ($ok -and $errors.Count -eq 0) "code=$($r.Code) len=$($r.Body.Length) errs=$($errors.Count) $($errors -join ' | ')"
 }
+
+# The monthly-activity columns must carry the vertical-bar class. Rendered
+# check, because the CSS assertion above cannot see which class a page emits.
+$reportsBody = (Invoke-App 'GET' 'reports/index.php' $admin).Body
+Assert 'reports renders chart columns with the column class' `
+    ($reportsBody -match 'chart-bar-fill\s+column')
 foreach ($page in @('dashboard.php','clients/index.php','leads/index.php','pipeline/index.php','tasks/index.php',
                     'activities/index.php','reports/index.php','auth/profile.php',
                     "client_view.php?id=$StaffFixtureClient", "lead_view.php?id=$StaffFixtureLead")) {

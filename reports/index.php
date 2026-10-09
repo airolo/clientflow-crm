@@ -79,7 +79,13 @@ require __DIR__ . '/../views/header.php';
                     ?>
                         <div class="flex-fill text-center d-flex flex-column justify-content-end h-100">
                             <div class="small fw-semibold mono mb-1"><?= (int) $month['total'] ?></div>
-                            <div class="chart-bar-fill mx-auto"
+                            <!--
+                                'column', not a bare .chart-bar-fill: that class is a
+                                999px-radius pill meant for the 10px horizontal bars.
+                                On a vertical bar it rounds into a capsule, so a tall
+                                month looked like a circle.
+                            -->
+                            <div class="chart-bar-fill column mx-auto"
                                  style="width:100%;height:<?= max($height, 2) ?>%"
                                  title="<?= e($month['label']) ?>: <?= (int) $month['total'] ?> activities"></div>
                         </div>

@@ -125,7 +125,10 @@ function client_create(array $data): int
         null_if_empty($data['phone'] ?? null),
         null_if_empty($data['address'] ?? null),
         $data['status'],
-        $data['assigned_to'] ?: null,
+        // Pre-existing: this key was read unguarded while every neighbour uses
+        // ?? null, so a save that omits an assignee logged an "Undefined array
+        // key" warning. The ?: is kept so an empty or 0 still becomes NULL.
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         $data['created_by'],
     ]);
@@ -157,7 +160,7 @@ function client_update(int $id, array $data): void
         null_if_empty($data['phone'] ?? null),
         null_if_empty($data['address'] ?? null),
         $data['status'],
-        $data['assigned_to'] ?: null,
+        ($data['assigned_to'] ?? null) ?: null,
         null_if_empty($data['notes'] ?? null),
         tenant_id(),
         $id,

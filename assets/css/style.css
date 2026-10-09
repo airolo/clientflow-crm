@@ -370,6 +370,20 @@ body {
 .chart-bar-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
 .chart-bar-track { flex: 1 1 auto; background: #f1f3f9; border-radius: 999px; height: 10px; overflow: hidden; }
 .chart-bar-fill { height: 100%; background: var(--cf-primary); border-radius: 999px; }
+/* Vertical column variant.
+ *
+ * The 999px radius above is a pill, which is right for the 10px horizontal
+ * progress bars it was written for. Reused on a vertical bar it clamps to half
+ * the element's shortest side, so the taller the value the more the bar rounds
+ * into a capsule - and reads as a circle rather than a bar.
+ *
+ * Columns get a small radius on the top corners only, so the base stays square
+ * against the axis. */
+.chart-bar-fill.column { height: auto; border-radius: 4px 4px 0 0; }
+.chart-bar-fill.column.success { background: #10b981; }
+.chart-bar-fill.column.danger  { background: #ef4444; }
+.chart-bar-fill.column.warning { background: #f59e0b; }
+.chart-bar-fill.column.info    { background: #0ea5e9; }
 .chart-bar-fill.success { background: #10b981; }
 .chart-bar-fill.danger  { background: #ef4444; }
 .chart-bar-fill.warning { background: #f59e0b; }

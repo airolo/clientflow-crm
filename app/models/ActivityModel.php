@@ -74,8 +74,8 @@ function activity_create(array $data): int
     );
     $stmt->execute([
         tenant_id(),
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         $data['type'],
         $data['title'],
         null_if_empty($data['details'] ?? null),
@@ -97,8 +97,8 @@ function activity_update(int $id, array $data): void
          WHERE tenant_id = ? AND id = ?'
     );
     $stmt->execute([
-        $data['client_id'] ?: null,
-        $data['lead_id'] ?: null,
+        ($data['client_id'] ?? null) ?: null,
+        ($data['lead_id'] ?? null) ?: null,
         $data['type'],
         $data['title'],
         null_if_empty($data['details'] ?? null),
